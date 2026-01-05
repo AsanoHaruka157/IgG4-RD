@@ -133,12 +133,12 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     CD4_CTL   = y[IDX["CD4_CTL"]]
     nTreg     = y[IDX["nTreg"]]
     TFH       = y[IDX["TFH"]]
-    NK        = y[IDX["NK"]]
-    act_NK    = y[IDX["act_NK"]]
+    CD56_NK        = y[IDX["CD56_NK"]]
+    CD16_NK    = y[IDX["CD16_NK"]]
     Naive_B   = y[IDX["Naive_B"]]
     Act_B     = y[IDX["Act_B"]]
-    TD_IS_B   = y[IDX["TD_IS_B"]]
-    TI_IS_B   = y[IDX["TI_IS_B"]]
+    TD_Plasma   = y[IDX["TD_Plasma"]]
+    TI_Plasma   = y[IDX["TI_Plasma"]]
     IgG4      = y[IDX["IgG4"]]
 
     # ---- Antigen根据时间变化：0-100s为0，100-150s线性增长到1，150s后保持1 ----
@@ -168,7 +168,7 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         - p["k_mDC_GMCSF_d"] * Antigen * nDC * (GMCSF / (GMCSF + p["k_mDC_GMCSF_m"])) * (p["k_mDC_IL_10_m"] / (p["k_mDC_IL_10_m"] + IL_10))
         + p["k_GMCSF_Th2_f"] * Th2
         + p["k_GMCSF_Th2_Antigen_f"] * Th2 * Antigen
-        + p["k_GMCSF_act_NK_f"] * act_NK
+        + p["k_GMCSF_act_NK_f"] * CD16_NK
         - p["k_GMCSF_d"] * GMCSF
     )
 
@@ -195,7 +195,7 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
 
     dIL_12 = (
         p["k_IL_12_mDC_f"] * mDC
-        - p["k_act_NK_IL_12_d"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        - p["k_act_NK_IL_12_d"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
         - p["k_IL_12_d"] * IL_12
     )
 
@@ -217,7 +217,7 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     dIFN1 = (
         p["k_IFN1_pDC_f"] * pDC
         - p["k_act_CD4_IFN1_d"] * act_CD4 * IFN1 / (p["k_IFN1_CD4_CTL_m"] + IFN1)
-        - p["k_act_NK_IFN1_d"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        - p["k_act_NK_IFN1_d"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
         - p["k_IFN1_d"] * IFN1
     )
 
@@ -230,7 +230,7 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         p["k_IL_2_act_CD4_f"] * act_CD4
         + p["k_IL_2_act_CD4_Antigen_f"] * act_CD4 * Antigen
         - p["k_act_CD4_IL_2_d"] * naive_CD4 * IL_2 / (p["k_act_CD4_IL_2_m"] + IL_2)
-        - p["k_act_NK_IL_2_d"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        - p["k_act_NK_IL_2_d"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
         - p["k_IL_2_d"] * IL_2
     )
 
@@ -258,8 +258,8 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
 
     dIFN_g = (
         p["k_IFN_g_CD4_CTL_f"] * CD4_CTL
-        + p["k_IFN_g_act_NK_f"] * act_NK
-        - p["k_act_NK_IFN_g_d"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        + p["k_IFN_g_act_NK_f"] * CD16_NK
+        - p["k_act_NK_IFN_g_d"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
         - p["k_IFN_g_d"] * IFN_g
     )
 
@@ -331,23 +331,23 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     )
 
     dNK = (
-        p["k_NK_f"] * NK * (1 - NK / p["k_NK_m"])
-        - p["k_act_NK_base_f"] * NK
-        - p["k_act_NK_IL_12_f"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
-        - p["k_act_NK_IL_2_f"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
-        - p["k_act_NK_IFN1_f"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
-        - p["k_act_NK_IFN_g_f"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
-        - p["k_NK_d"] * NK
+        p["k_NK_f"] * CD56_NK * (1 - CD56_NK / p["k_NK_m"])
+        - p["k_act_NK_base_f"] * CD56_NK
+        - p["k_act_NK_IL_12_f"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        - p["k_act_NK_IL_2_f"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        - p["k_act_NK_IFN1_f"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        - p["k_act_NK_IFN_g_f"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        - p["k_NK_d"] * CD56_NK
     )
 
     dact_NK = (
-        p["k_act_NK_base_f"] * NK
-        + p["k_act_NK_IL_12_f"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
-        + p["k_act_NK_IL_2_f"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
-        + p["k_act_NK_IFN1_f"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
-        + p["k_act_NK_IFN_g_f"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
-        + p["k_act_NK_f"] * act_NK * (1 - act_NK / p["k_act_NK_m"])
-        - p["k_act_NK_d"] * act_NK
+        p["k_act_NK_base_f"] * CD56_NK
+        + p["k_act_NK_IL_12_f"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        + p["k_act_NK_IL_2_f"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        + p["k_act_NK_IFN1_f"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        + p["k_act_NK_IFN_g_f"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        + p["k_act_NK_f"] * CD16_NK * (1 - CD16_NK / p["k_act_NK_m"])
+        - p["k_act_NK_d"] * CD16_NK
     )
 
     dNaive_B = (
@@ -369,21 +369,21 @@ def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     dTD_IS_B = (
         p["k_TD_base_f"] * Act_B
         + p["k_TD_IL_4_f"] * Act_B * IL_4
-        + p["k_TD_f"] * TD_IS_B * (1 - TD_IS_B / p["k_TD_m"])
-        - p["k_TD_d"] * TD_IS_B
+        + p["k_TD_f"] * TD_Plasma * (1 - TD_Plasma / p["k_TD_m"])
+        - p["k_TD_d"] * TD_Plasma
     )
 
     dTI_IS_B = (
         p["k_TI_base_f"] * Act_B
         + p["k_TI_IFN_g_f"] * Act_B * IFN_g
         + p["k_TI_IL_10_f"] * Act_B * IL_10
-        + p["k_TI_f"] * TI_IS_B * (1 - TI_IS_B / p["k_TI_m"])
-        - p["k_TI_d"] * TI_IS_B
+        + p["k_TI_f"] * TI_Plasma * (1 - TI_Plasma / p["k_TI_m"])
+        - p["k_TI_d"] * TI_Plasma
     )
 
     dIgG4 = (
-        p["k_IgG4_TI_f"] * 1e8 * TI_IS_B
-        + p["k_IgG4_TD_f"] * 1e8 * TD_IS_B
+        p["k_IgG4_TI_f"] * 1e8 * TI_Plasma
+        + p["k_IgG4_TD_f"] * 1e8 * TD_Plasma
         - p["k_IgG4_d"] * IgG4
     )
 
@@ -644,12 +644,12 @@ def get_initial_conditions() -> np.ndarray:
     y0[IDX["CD4_CTL"]] = 1.0      # CD4 CTL初始为0
     y0[IDX["nTreg"]] = 2.0       # nTreg约10-30，取20
     y0[IDX["TFH"]] = 5.0         # TFH约10-20，取15
-    y0[IDX["NK"]] = 50.0          # NK约50
-    y0[IDX["act_NK"]] = 200.0     # act_NK约180-200，取190
+    y0[IDX["CD56_NK"]] = 50.0          # NK约50
+    y0[IDX["CD16_NK"]] = 200.0     # act_NK约180-200，取190
     y0[IDX["Naive_B"]] = 92.0     # Naive B约84-92，取88
     y0[IDX["Act_B"]] = 80.0       # Act_B约80
-    y0[IDX["TD_IS_B"]] = 2.0      # TD-Plasma初始为0
-    y0[IDX["TI_IS_B"]] = 0.0      # TI-Plasma初始为0
+    y0[IDX["TD_Plasma"]] = 2.0      # TD-Plasma初始为0
+    y0[IDX["TI_Plasma"]] = 0.0      # TI-Plasma初始为0
     y0[IDX["IgG4"]] = 0.0         # IgG4初始为0
     
     # 第二张图（细胞因子），初始值都较低
@@ -690,8 +690,8 @@ def test_integration(t_end: float = 300.0, n_points: int = 300, verbose: bool = 
     y0 = get_initial_conditions()
     print(f"初始条件: 根据参考图片设置")
     print(f"  主要细胞类型:")
-    print(f"    nDC: {y0[IDX['nDC']]:.1f}, naive_CD4: {y0[IDX['naive_CD4']]:.1f}, NK: {y0[IDX['NK']]:.1f}")
-    print(f"    act_NK: {y0[IDX['act_NK']]:.1f}, Naive_B: {y0[IDX['Naive_B']]:.1f}, Act_B: {y0[IDX['Act_B']]:.1f}")
+    print(f"    nDC: {y0[IDX['nDC']]:.1f}, naive_CD4: {y0[IDX['naive_CD4']]:.1f}, CD56_NK: {y0[IDX['CD56_NK']]:.1f}")
+    print(f"    CD16_NK: {y0[IDX['CD16_NK']]:.1f}, Naive_B: {y0[IDX['Naive_B']]:.1f}, Act_B: {y0[IDX['Act_B']]:.1f}")
     print(f"  细胞因子: 初始值均为0")
     print(f"时间范围: [0, {t_end}], 时间点数: {n_points}")
     
@@ -739,12 +739,12 @@ def plot_results(ts: np.ndarray, result: np.ndarray):
         "CD4_CTL",       # 8
         "nTreg",         # 9
         "TFH",           # 10
-        "NK",            # 11
-        "act_NK",        # 12
+        "CD56_NK",            # 11
+        "CD16_NK",        # 12
         "Naive_B",       # 13
         "Act_B",         # 14
-        "TD_IS_B",       # 15
-        "TI_IS_B",       # 16
+        "TD_Plasma",       # 15
+        "TI_Plasma",       # 16
     ]
     
     n_vars = len(plot_order)
@@ -1079,12 +1079,12 @@ def get_hc_friendly_parameters() -> Dict[str, float]:
         "CD4_CTL": 1.0,
         "nTreg": 20.0,
         "TFH": 18.0,
-        "NK": 50.0,
-        "act_NK": 200.0,
+        "CD56_NK": 50.0,
+        "CD16_NK": 200.0,
         "Naive_B": 88.0,
         "Act_B": 95.0,
-        "TD_IS_B": 2.0,
-        "TI_IS_B": 0.0,
+        "TD_Plasma": 2.0,
+        "TI_Plasma": 0.0,
         "IgG4": 0.0,
         "GMCSF": 3.0e3,
         "IL_33": 0.0,
@@ -1219,11 +1219,11 @@ def get_hc_friendly_parameters() -> Dict[str, float]:
     # k_IL_1_mDC_f * mDC = 0.1 * 2.5e3 => k_IL_1_mDC_f ≈ 1.25e-1
     params["k_IL_1_mDC_f"] = 1.25e-1  # mDC 生成 IL-1
     
-    # GMCSF: 目标 3.0e3，来自 Th2 和 act_NK
-    # k_GMCSF_Th2_f * Th2 + k_GMCSF_act_NK_f * act_NK = 0.1 * 3.0e3 （需考虑清除与生成平衡）
-    # Th2=0.30, act_NK=200，假设分别贡献
+    # GMCSF: 目标 3.0e3，来自 Th2 和 CD16_NK
+    # k_GMCSF_Th2_f * Th2 + k_GMCSF_act_NK_f * CD16_NK = 0.1 * 3.0e3 （需考虑清除与生成平衡）
+    # Th2=0.30, CD16_NK=200，假设分别贡献
     params["k_GMCSF_Th2_f"] = 1.0e0   # Th2 生成 GMCSF
-    params["k_GMCSF_act_NK_f"] = 1.5e-2  # act_NK 生成 GMCSF
+    params["k_GMCSF_act_NK_f"] = 1.5e-2  # CD16_NK 生成 GMCSF
     
     # TGFbeta: 目标 1.0e2，来自 iTreg, nTreg, CD4_CTL
     # k_TGFbeta_iTreg_f * iTreg + k_TGFbeta_nTreg_f * nTreg + k_TGFbeta_CD4_CTL_f * CD4_CTL = 0.1 * 1.0e2
@@ -1231,11 +1231,11 @@ def get_hc_friendly_parameters() -> Dict[str, float]:
     params["k_TGFbeta_nTreg_f"] = 4.0e-3  # nTreg 辅助生成
     params["k_TGFbeta_CD4_CTL_f"] = 8.0e-2  # CD4_CTL 生成 TGF-β
     
-    # IFN-gamma: 目标 2.0e5，来自 CD4_CTL 和 act_NK
-    # k_IFN_g_CD4_CTL_f * CD4_CTL + k_IFN_g_act_NK_f * act_NK = 0.1 * 2.0e5
-    # CD4_CTL=1, act_NK=200，act_NK 应贡献更多
+    # IFN-gamma: 目标 2.0e5，来自 CD4_CTL 和 CD16_NK
+    # k_IFN_g_CD4_CTL_f * CD4_CTL + k_IFN_g_act_NK_f * CD16_NK = 0.1 * 2.0e5
+    # CD4_CTL=1, CD16_NK=200，CD16_NK 应贡献更多
     params["k_IFN_g_CD4_CTL_f"] = 1.0e2   # CD4_CTL 生成 IFN-γ （小数量贡献）
-    params["k_IFN_g_act_NK_f"] = 1.0e-1  # act_NK 主要生成 IFN-γ
+    params["k_IFN_g_act_NK_f"] = 1.0e-1  # CD16_NK 主要生成 IFN-γ
     
     # IFN-I: 目标 0.0，设为极小值（防止无限增长）
     params["k_IFN1_pDC_f"] = 1.0e-5  # pDC 极小生成 IFN-I
@@ -1292,25 +1292,25 @@ def get_hc_friendly_parameters() -> Dict[str, float]:
     params["k_TFH_IL_6_f"] = 3.0e-3  # IL-6 诱导 TFH 分化
     params["k_TFH_IFN1_f"] = 1.0e-3  # IFN-I 弱化诱导
     
-    # NK 相关
-    params["k_NK_f"] = 0.0  # NK logistic 增殖关闭
-    params["k_act_NK_f"] = 0.0  # act_NK logistic 增殖关闭
-    params["k_act_NK_base_f"] = 2.0e-1  # NK 的基础激活速率
-    params["k_act_NK_IL_12_f"] = 1.5e-2  # IL-12 诱导 NK 激活
-    params["k_act_NK_IL_2_f"] = 1.0e-2   # IL-2 诱导 NK 激活
-    params["k_act_NK_IFN1_f"] = 5.0e-3   # IFN-I 诱导 NK 激活
+    # CD56_NK 相关
+    params["k_NK_f"] = 0.0  # CD56_NK logistic 增殖关闭
+    params["k_act_NK_f"] = 0.0  # CD16_NK logistic 增殖关闭
+    params["k_act_NK_base_f"] = 2.0e-1  # CD56_NK 的基础激活速率
+    params["k_act_NK_IL_12_f"] = 1.5e-2  # IL-12 诱导 CD56_NK 激活
+    params["k_act_NK_IL_2_f"] = 1.0e-2   # IL-2 诱导 CD56_NK 激活
+    params["k_act_NK_IFN1_f"] = 5.0e-3   # IFN-I 诱导 CD56_NK 激活
     params["k_act_NK_IFN_g_f"] = 3.0e-3  # IFN-γ 自我增强
     
     # B 细胞相关
     params["k_Naive_B_f"] = 0.0  # Naive_B logistic 增殖关闭
     params["k_Act_B_f"] = 0.0   # Act_B logistic 增殖关闭
     params["k_Act_B_basal_f"] = 1.0e-2  # Naive_B → Act_B 的基础激活速率
-    params["k_TD_f"] = 0.0     # TD_IS_B logistic 增殖关闭
-    params["k_TI_f"] = 0.0     # TI_IS_B logistic 增殖关闭
+    params["k_TD_f"] = 0.0     # TD_Plasma logistic 增殖关闭
+    params["k_TI_f"] = 0.0     # TI_Plasma logistic 增殖关闭
     
     # Plasma cell 分化参数
-    params["k_TD_base_f"] = 1.0e-3  # Act_B → TD_IS_B 的基础分化速率
-    params["k_TI_base_f"] = 1.0e-4  # Act_B → TI_IS_B 的基础分化速率（极小，HC下TI_IS_B接近0）
+    params["k_TD_base_f"] = 1.0e-3  # Act_B → TD_Plasma 的基础分化速率
+    params["k_TI_base_f"] = 1.0e-4  # Act_B → TI_Plasma 的基础分化速率（极小，HC下TI_IS_B接近0）
     params["k_TD_IL_4_f"] = 5.0e-3  # IL-4 增强 TD 分化
     params["k_TI_IFN_g_f"] = 5.0e-3  # IFN-γ 增强 TI 分化
     params["k_TI_IL_10_f"] = 3.0e-3  # IL-10 增强 TI 分化
@@ -1367,10 +1367,10 @@ def setup_target_values():
     target_igg4 : dict，IgG4阶段（t=200）的目标值
     """
     # A图16个变量在t=200的值（从左到右，从上到下）
-    # nDC, mDC, pDC, naive_CD4, act_CD4, Th2, iTreg, CD4_CTL, nTreg, TFH, NK, act_NK, Naive_B, Act_B, TD_IS_B, TI_IS_B
+    # nDC, mDC, pDC, naive_CD4, act_CD4, Th2, iTreg, CD4_CTL, nTreg, TFH, CD56_NK, CD16_NK, Naive_B, Act_B, TD_Plasma, TI_Plasma
     a_values_t200 = [0, 20, 4, 75, 500, 0.2, 45, 2, 5, 20, 25, 310, 94, 90, 10, 0.1]
     a_vars = ["nDC", "mDC", "pDC", "naive_CD4", "act_CD4", "Th2", "iTreg", "CD4_CTL", 
-              "nTreg", "TFH", "NK", "act_NK", "Naive_B", "Act_B", "TD_IS_B", "TI_IS_B"]
+              "nTreg", "TFH", "CD56_NK", "CD16_NK", "Naive_B", "Act_B", "TD_Plasma", "TI_Plasma"]
     
     # B图13个变量在t=200的值（从左到右，从上到下）
     # GMCSF, IL_33, IL_6, IL_12, IL_15, IL_7, IFN1, IL_1, IL_2, IL_4, IL_10, TGFbeta, IFN_g
@@ -1936,41 +1936,73 @@ if __name__ == '__main__':
     t = np.linspace(0, 300, 3001)
     print("求解ODE系统...")
     y_solution = odeint(rhs_with_antigen, y0, t, rtol=1e-8, atol=1e-10)
-    print("✓ 求解完成\n")
+    print("[OK] 求解完成\n")
     
-    # 绘制轨线图
-    print("生成轨线图...")
+    # ====================================================================
+    # Combined Figure: 细胞计数（上）+ 细胞因子（下）
+    # ====================================================================
+    print("生成综合图表...")
+    
+    cells_order = [
+        "nDC", "mDC", "pDC", "naive_CD4",
+        "act_CD4", "Th2", "iTreg", "CD4_CTL",
+        "nTreg", "TFH", "CD56_NK", "CD16_NK",
+        "Naive_B", "Act_B", "TD_Plasma", "TI_Plasma"
+    ]
+    
+    cytokine_order = [
+        "GMCSF", "IL_33", "IL_6", "IL_12",
+        "IL_15", "IL_7", "IFN1", "IL_1",
+        "IL_2", "IL_4", "IL_10", "TGFbeta",
+        "IFN_g", "Antigen"
+    ]
+    
+    # 创建8x4的图表（共32个子图，最后两个隐藏）
     fig, axes = plt.subplots(8, 4, figsize=(16, 20))
     axes = axes.flatten()
     
-    for i, name in enumerate(STATE_NAMES):
-        ax = axes[i]
-        ax.plot(t, y_solution[:, i], linewidth=1.5, color='steelblue')
+    # 绘制细胞计数（前16个子图）
+    for plot_idx, var_name in enumerate(cells_order):
+        ax = axes[plot_idx]
+        state_idx = IDX[var_name]
+        ax.plot(t, y_solution[:, state_idx], linewidth=1.5, color='steelblue')
         
         # 标记antigen刺激区间
-        ax.axvspan(100, 150, alpha=0.2, color='red', label='Antigen stimulus')
+        ax.axvspan(100, 150, alpha=0.15, color='red')
         
-        ax.set_title(f'{name}', fontsize=10, fontweight='bold')
+        ax.set_title(var_name, fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3)
         ax.set_xlabel('Time (s)', fontsize=8)
-        ax.set_ylabel('Concentration', fontsize=8)
-        ax.tick_params(labelsize=8)
-        
-        if i == 0:  # Antigen图加入图例
-            ax.legend(fontsize=7, loc='best')
+        ax.set_ylabel('Cell count', fontsize=8)
+        ax.tick_params(labelsize=7)
     
-    # 隐藏最后一个空子图
+    # 绘制细胞因子（后16个子图中的14个）
+    for plot_idx, var_name in enumerate(cytokine_order):
+        ax = axes[16 + plot_idx]
+        state_idx = IDX[var_name]
+        ax.plot(t, y_solution[:, state_idx], linewidth=1.5, color='#2E86AB')
+        
+        # 标记antigen刺激区间
+        ax.axvspan(100, 150, alpha=0.15, color='red')
+        
+        ax.set_title(var_name, fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel('Time (s)', fontsize=8)
+        ax.set_ylabel('Concentration [pmol/mL]', fontsize=8)
+        ax.tick_params(labelsize=7)
+    
+    # 隐藏最后两个空子图（只用14个细胞因子）
+    axes[-2].set_visible(False)
     axes[-1].set_visible(False)
     
-    plt.suptitle('Antigen Stimulus Simulation: HC_bl + HC_param (t=100-150s: Ag 0→1)', 
-                 fontsize=14, fontweight='bold', y=0.995)
+    plt.suptitle('ODE Simulation: HC baseline vs IgG4 response (Antigen stimulus: t=100-150s)', 
+                 fontsize=13, fontweight='bold', y=0.9995)
     plt.tight_layout()
-
-    # 保存图片并展示
+    
     output_path = 'antigen_stimulus.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    print(f"✓ 已保存: {output_path}\n")
-    print("✓ 显示轨线图\n")
+    print(f"[OK] 已保存: {output_path}\n")
+    print("[OK] 显示轨线图\n")
     plt.show()
     
     print("=" * 80)

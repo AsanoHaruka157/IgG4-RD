@@ -188,8 +188,8 @@ STATE_NAMES = [
     "Antigen", "nDC", "mDC", "GMCSF", "pDC",
     "IL_33", "IL_6", "IL_12", "IL_15", "IL_7", "IFN1", "IL_1", "IL_2", "IL_4", "IL_10", "TGFbeta", "IFN_g",
     "naive_CD4", "act_CD4", "Th2", "iTreg", "CD4_CTL", "nTreg", "TFH",
-    "NK", "act_NK",
-    "Naive_B", "Act_B", "TD_IS_B", "TI_IS_B",
+    "CD56_NK", "CD16_NK",
+    "Naive_B", "Act_B", "TD_Plasma", "TI_Plasma",
     "IgG4",
 ]
 
@@ -508,12 +508,12 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     CD4_CTL   = y[IDX["CD4_CTL"]]
     nTreg     = y[IDX["nTreg"]]
     TFH       = y[IDX["TFH"]]
-    NK        = y[IDX["NK"]]
-    act_NK    = y[IDX["act_NK"]]
+    CD56_NK   = y[IDX["CD56_NK"]]
+    CD16_NK   = y[IDX["CD16_NK"]]
     Naive_B   = y[IDX["Naive_B"]]
     Act_B     = y[IDX["Act_B"]]
-    TD_IS_B   = y[IDX["TD_IS_B"]]
-    TI_IS_B   = y[IDX["TI_IS_B"]]
+    TD_Plasma = y[IDX["TD_Plasma"]]
+    TI_Plasma = y[IDX["TI_Plasma"]]
     IgG4      = y[IDX["IgG4"]]
 
     # ========== nDC 方程 ==========
@@ -538,7 +538,7 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         - p["k_mDC_GMCSF_d"] * Antigen * nDC * (GMCSF / (GMCSF + p["k_mDC_GMCSF_m"])) * (p["k_mDC_IL_10_m"] / (p["k_mDC_IL_10_m"] + IL_10))
         + p["k_GMCSF_Th2_f"] * Th2
         + p["k_GMCSF_Th2_Antigen_f"] * Th2 * Antigen
-        + p["k_GMCSF_act_NK_f"] * act_NK
+        + p["k_GMCSF_act_NK_f"] * CD16_NK
         - p["k_GMCSF_d"] * GMCSF
     )
 
@@ -568,7 +568,7 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     # ========== IL_12 方程 ==========
     dIL_12 = (
         p["k_IL_12_mDC_f"] * mDC
-        - p["k_act_NK_IL_12_d"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        - p["k_act_NK_IL_12_d"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
         - p["k_IL_12_d"] * IL_12
     )
 
@@ -593,7 +593,7 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     dIFN1 = (
         p["k_IFN1_pDC_f"] * pDC
         - p["k_act_CD4_IFN1_d"] * act_CD4 * IFN1 / (p["k_IFN1_CD4_CTL_m"] + IFN1)
-        - p["k_act_NK_IFN1_d"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        - p["k_act_NK_IFN1_d"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
         - p["k_IFN1_d"] * IFN1
     )
 
@@ -608,7 +608,7 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         p["k_IL_2_act_CD4_f"] * act_CD4
         + p["k_IL_2_act_CD4_Antigen_f"] * act_CD4 * Antigen
         - p["k_act_CD4_IL_2_d"] * naive_CD4 * IL_2 / (p["k_act_CD4_IL_2_m"] + IL_2)
-        - p["k_act_NK_IL_2_d"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        - p["k_act_NK_IL_2_d"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
         - p["k_IL_2_d"] * IL_2
     )
 
@@ -640,8 +640,8 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     # ========== IFN_g 方程 ==========
     dIFN_g = (
         p["k_IFN_g_CD4_CTL_f"] * CD4_CTL
-        + p["k_IFN_g_act_NK_f"] * act_NK
-        - p["k_act_NK_IFN_g_d"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        + p["k_IFN_g_act_NK_f"] * CD16_NK
+        - p["k_act_NK_IFN_g_d"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
         - p["k_IFN_g_d"] * IFN_g
     )
 
@@ -719,26 +719,26 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         - p["k_TFH_d"] * TFH
     )
 
-    # ========== NK 方程 ==========
-    dNK = (
-        p["k_NK_f"] * NK * (1 - NK / p["k_NK_m"])
-        - p["k_act_NK_base_f"] * NK
-        - p["k_act_NK_IL_12_f"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
-        - p["k_act_NK_IL_2_f"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
-        - p["k_act_NK_IFN1_f"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
-        - p["k_act_NK_IFN_g_f"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
-        - p["k_NK_d"] * NK
+    # ========== CD56_NK 方程 ==========
+    dCD56_NK = (
+        p["k_NK_f"] * CD56_NK * (1 - CD56_NK / p["k_NK_m"])
+        - p["k_act_NK_base_f"] * CD56_NK
+        - p["k_act_NK_IL_12_f"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        - p["k_act_NK_IL_2_f"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        - p["k_act_NK_IFN1_f"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        - p["k_act_NK_IFN_g_f"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        - p["k_NK_d"] * CD56_NK
     )
 
-    # ========== act_NK 方程 ==========
-    dact_NK = (
-        p["k_act_NK_base_f"] * NK
-        + p["k_act_NK_IL_12_f"] * NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
-        + p["k_act_NK_IL_2_f"] * NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
-        + p["k_act_NK_IFN1_f"] * NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
-        + p["k_act_NK_IFN_g_f"] * NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
-        + p["k_act_NK_f"] * act_NK * (1 - act_NK / p["k_act_NK_m"])
-        - p["k_act_NK_d"] * act_NK
+    # ========== CD16_NK 方程 ==========
+    dCD16_NK = (
+        p["k_act_NK_base_f"] * CD56_NK
+        + p["k_act_NK_IL_12_f"] * CD56_NK * IL_12 / (IL_12 + p["k_act_NK_IL_12_m"])
+        + p["k_act_NK_IL_2_f"] * CD56_NK * IL_2 / (IL_2 + p["k_act_NK_IL_2_m"])
+        + p["k_act_NK_IFN1_f"] * CD56_NK * IFN1 / (IFN1 + p["k_act_NK_IFN1_m"])
+        + p["k_act_NK_IFN_g_f"] * CD56_NK * IFN_g / (IFN_g + p["k_act_NK_IFN_g_m"])
+        + p["k_act_NK_f"] * CD16_NK * (1 - CD16_NK / p["k_act_NK_m"])
+        - p["k_act_NK_d"] * CD16_NK
     )
 
     # ========== Naive_B 方程 ==========
@@ -759,27 +759,27 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         - p["k_Act_B_d"] * Act_B
     )
 
-    # ========== TD_IS_B 方程 ==========
-    dTD_IS_B = (
+    # ========== TD_Plasma 方程 ==========
+    dTD_Plasma = (
         p["k_TD_base_f"] * Act_B
         + p["k_TD_IL_4_f"] * Act_B * IL_4
-        + p["k_TD_f"] * TD_IS_B * (1 - TD_IS_B / p["k_TD_m"])
-        - p["k_TD_d"] * TD_IS_B
+        + p["k_TD_f"] * TD_Plasma * (1 - TD_Plasma / p["k_TD_m"])
+        - p["k_TD_d"] * TD_Plasma
     )
 
-    # ========== TI_IS_B 方程 ==========
-    dTI_IS_B = (
+    # ========== TI_Plasma 方程 ==========
+    dTI_Plasma = (
         p["k_TI_base_f"] * Act_B
         + p["k_TI_IFN_g_f"] * Act_B * IFN_g
         + p["k_TI_IL_10_f"] * Act_B * IL_10
-        + p["k_TI_f"] * TI_IS_B * (1 - TI_IS_B / p["k_TI_m"])
-        - p["k_TI_d"] * TI_IS_B
+        + p["k_TI_f"] * TI_Plasma * (1 - TI_Plasma / p["k_TI_m"])
+        - p["k_TI_d"] * TI_Plasma
     )
 
     # ========== IgG4 方程 ==========
     dIgG4 = (
-        p["k_IgG4_TI_f"] * 1e8 * TI_IS_B
-        + p["k_IgG4_TD_f"] * 1e8 * TD_IS_B
+        p["k_IgG4_TI_f"] * 1e8 * TI_Plasma
+        + p["k_IgG4_TD_f"] * 1e8 * TD_Plasma
         - p["k_IgG4_d"] * IgG4
     )
 
@@ -788,8 +788,8 @@ def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
         dAntigen, dnDC, dmDC, dGMCSF, dpDC,
         dIL_33, dIL_6, dIL_12, dIL_15, dIL_7, dIFN1, dIL_1, dIL_2, dIL_4, dIL_10, dTGFbeta, dIFN_g,
         dnaive_CD4, dact_CD4, dTh2, diTreg, dCD4_CTL, dnTreg, dTFH,
-        dNK, dact_NK,
-        dNaive_B, dAct_B, dTD_IS_B, dTI_IS_B,
+        dCD56_NK, dCD16_NK,
+        dNaive_B, dAct_B, dTD_Plasma, dTI_Plasma,
         dIgG4
     ], dtype=float)
 
@@ -1017,11 +1017,52 @@ def HC_bl():
     y0["CD4_CTL"] = 4.202732486965451e+01
     y0["nTreg"] = 9.413414364985554e-13
     y0["TFH"] = 9.828709665184974e+01
-    y0["NK"] = 4.641162008954428e+01
-    y0["act_NK"] = 1.005606441314536e+02
+    y0["CD56_NK"] = 4.641162008954428e+01
+    y0["CD16_NK"] = 1.005606441314536e+02
     y0["Naive_B"] = 6.399999999999998e+01
     y0["Act_B"] = 8.641607796638505e+01
-    y0["TD_IS_B"] = 1.348814515484752e+03
-    y0["TI_IS_B"] = 1.414565344251858e+05
+    y0["TD_Plasma"] = 1.348814515484752e+03
+    y0["TI_Plasma"] = 1.414565344251858e+05
     y0["IgG4"] = 9.413409156823363e-13
+    return y0
+
+# ============================================================================
+# IgG4 target steady-state (estimated from Figure A and Figure B)
+# ============================================================================
+def IgG_target():
+    """
+    IgG4诱导后的稳态值（从实验图估计）
+    """
+    y0 = {}
+    y0["Antigen"] = 1.000000000000000e+00
+    y0["nDC"] = 5.000000000000000e+00
+    y0["mDC"] = 1.200000000000000e+01
+    y0["GMCSF"] = 5.000000000000000e+03
+    y0["pDC"] = 5.000000000000000e+00
+    y0["IL_33"] = 4.000000000000000e+04
+    y0["IL_6"] = 6.000000000000000e+04
+    y0["IL_12"] = 2.000000000000000e+04
+    y0["IL_15"] = 1.300000000000000e+05
+    y0["IL_7"] = 8.000000000000000e+04
+    y0["IFN1"] = 1.500000000000000e+00
+    y0["IL_1"] = 6.500000000000000e+03
+    y0["IL_2"] = 1.300000000000000e+04
+    y0["IL_4"] = 1.800000000000000e+03
+    y0["IL_10"] = 1.000000000000000e+04
+    y0["TGFbeta"] = 5.000000000000000e+01
+    y0["IFN_g"] = 1.000000000000000e+06
+    y0["naive_CD4"] = 8.000000000000000e+01
+    y0["act_CD4"] = 5.000000000000000e+02
+    y0["Th2"] = 4.000000000000000e-01
+    y0["iTreg"] = 4.500000000000000e+01
+    y0["CD4_CTL"] = 4.000000000000000e+00
+    y0["nTreg"] = 8.000000000000000e+00
+    y0["TFH"] = 3.000000000000000e+01
+    y0["CD56_NK"] = 2.000000000000000e+01
+    y0["CD16_NK"] = 3.200000000000000e+02
+    y0["Naive_B"] = 9.400000000000000e+01
+    y0["Act_B"] = 8.000000000000000e+01
+    y0["TD_Plasma"] = 1.000000000000000e+01
+    y0["TI_Plasma"] = 1.000000000000000e+00
+    y0["IgG4"] = 1.400000000000000e+02
     return y0

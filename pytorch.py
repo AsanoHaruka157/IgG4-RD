@@ -1,3 +1,4 @@
+# 使用pytorch梯度下降优化求解data driven ode的废案
 from __future__ import annotations
 import numpy as np
 import os
