@@ -243,12 +243,22 @@ STATE_NAMES = [
     "Antigen", "nDC", "mDC", "GMCSF", "pDC",
     "IL_33", "IL_6", "IL_12", "IL_15", "IL_7", "IFN1", "IL_1", "IL_2", "IL_4", "IL_10", "TGFbeta", "IFN_g",
     "naive_CD4", "act_CD4", "Th2", "iTreg", "CD4_CTL", "nTreg", "TFH",
-    "NK", "act_NK",
-    "Naive_B", "Act_B", "TD_IS_B", "TI_IS_B",
+    "CD56 NK", "CD16 NK",
+    "Naive_B", "Act_B", "TD Plasma", "TI Plasma",
     "IgG4",
 ]
 N_STATE = len(STATE_NAMES)
 IDX = {n: i for i, n in enumerate(STATE_NAMES)}
+
+# Backward-compatible aliases
+ALIASES = {
+    "NK": "CD56 NK",
+    "act_NK": "CD16 NK",
+    "TD_IS_B": "TD Plasma",
+    "TI_IS_B": "TI Plasma",
+}
+for old, new in ALIASES.items():
+    IDX[old] = IDX[new]
 
 # -------------------------
 # 1) 参数向量化：用 log 参数化保证正数

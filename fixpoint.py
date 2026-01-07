@@ -7,16 +7,16 @@ fixpoint.py
 
 import numpy as np
 from scipy.optimize import least_squares
-from utils import HC_init, HC_param, HC_bl, rhs_hc, STATE_NAMES, IDX
+from utils import HC_state, HC_param, HC_bl, rhs_hc, STATE_NAMES, IDX
 
 def solve_steady_state(max_nfev: int = 500, tol: float = 1e-10):
     p = HC_param()
 
-    # 初始猜测：优先用已有 HC_bl，否则用 HC_init
+    # 初始猜测：优先用已有 HC_bl，否则用 HC_state
     try:
         y0_dict = HC_bl()
     except Exception:
-        y0_dict = HC_init()
+        y0_dict = HC_state()
     y0 = np.array([y0_dict[n] for n in STATE_NAMES], dtype=float)
 
     # 对数参数化（保证非负）；Antigen 固定 0，不优化

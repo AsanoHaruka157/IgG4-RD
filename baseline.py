@@ -1,7 +1,7 @@
 """
 IgG4-RD 系统轨线分析工具
 ========================
-从HC_init和HC_param生成轨线，采集t=1000处的稳态作为HC_bl
+从HC_state和HC_param生成轨线，采集t=1000处的稳态作为HC_bl
 
 用法：
     python fixpoint.py
@@ -10,7 +10,7 @@ IgG4-RD 系统轨线分析工具
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
-from utils import HC_init, HC_param, rhs_hc, STATE_NAMES
+from utils import HC_state, HC_param, rhs_hc, STATE_NAMES
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -19,12 +19,12 @@ def generate_trajectory_and_baseline():
     生成轨线，采集t=1000处的稳态
     """
     # 初始条件和参数
-    y0_dict = HC_init()
+    y0_dict = HC_state()
     p = HC_param()
     y0 = np.array([y0_dict[name] for name in STATE_NAMES])
     
     print("=" * 80)
-    print("HC_INIT + HC_PARAM 轨线分析（t=0 至 t=1000s）")
+    print("HC_state + HC_param 轨线分析（t=0 至 t=1000s）")
     print("=" * 80)
     print(f"\n[初始条件]")
     for i, name in enumerate(STATE_NAMES[:10]):
@@ -87,7 +87,7 @@ def generate_trajectory_and_baseline():
     print(f"生成 HC_BL 函数（t={final_time:.1f} 处的稳态）")
     print("=" * 80)
     
-    hc_bl_code = 'def HC_bl():\n    """\n    稳态值（从 HC_init 按 HC_param 运行，积分到残差收敛或 t=max_time）\n    """\n    y0 = {}\n'
+    hc_bl_code = 'def HC_bl():\n    """\n    稳态值（从 HC_state 按 HC_param 运行，积分到残差收敛或 t=max_time）\n    """\n    y0 = {}\n'
     for i, name in enumerate(STATE_NAMES):
         hc_bl_code += f'    y0["{name}"] = {y_steady[i]:.15e}\n'
     hc_bl_code += '    return y0\n'
@@ -109,7 +109,7 @@ def generate_trajectory_and_baseline():
     else:
         # 追加新的HC_bl
         utils_content += '\n\n' + '# ' + '=' * 78 + '\n'
-        utils_content += '# Baseline steady-state (from HC_init with HC_param at t=1000s)\n'
+        utils_content += '# Baseline steady-state (from HC_state with HC_param at t=1000s)\n'
         utils_content += '# ' + '=' * 78 + '\n'
         utils_content += hc_bl_code
     
@@ -144,7 +144,7 @@ def generate_trajectory_and_baseline():
     # 隐藏最后一个空子图
     axes[-1].set_visible(False)
 
-    plt.suptitle(f'Tail trajectories (last 500s): HC_init + HC_param, HC_bl at t={final_time:.1f}s',
+    plt.suptitle(f'Tail trajectories (last 500s): HC_state + HC_param, HC_bl at t={final_time:.1f}s',
                  fontsize=14, fontweight='bold', y=0.995)
     plt.tight_layout()
     plt.savefig('fixpoint_analysis.png', dpi=150, bbox_inches='tight')
