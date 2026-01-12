@@ -5,7 +5,7 @@ IgG4-RD 参数优化脚本
 目标：找到参数使系统从 HC_state 在抗原刺激后演化到 IgG_state
 """
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import basinhopping
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
@@ -49,6 +49,8 @@ p_names = [n for n in ALL_PARAMS if n in p_init]
 
 # 参数重参数化：k = k0 * 10^x，其中 x 受分组约束
 BASE_FLOOR = 1e-8
+RESIDUAL_TOL = 1e-4  # 设定RHS残差的理想上限
+RESIDUAL_TARGET = 5e-5  # 设定多解筛选的更严格阈值
 CARRYING_CAPACITY_MAP = {
     "k_nDC_m": "nDC",
     "k_mDC_m": "mDC",
@@ -144,90 +146,115 @@ def apply_params(x):
         p[n] = np.exp(theta)
     return p
 
+def compute_residual_norms(t_eval, sol, p):
+    """计算系统在不同时间段的RHS残差范数。"""
+    rhs_vals = np.zeros_like(sol)  # 为RHS计算预分配数组
+    for idx, t in enumerate(t_eval):  # 遍历时间节点
+        rhs_vals[idx] = rhs(t, sol[idx], p)  # 针对每个时间节点计算RHS
+    norms = np.linalg.norm(rhs_vals, axis=1)  # 逐点计算向量范数
+    pre_mask = t_eval < T_ANTIGEN_START  # 标记刺激前时间段
+    post_mask = t_eval >= T_STEADY  # 标记稳态评估时间段
+    pre_norm = norms[pre_mask].mean() if pre_mask.any() else np.inf  # 计算刺激前平均残差
+    post_norm = norms[post_mask].mean() if post_mask.any() else np.inf  # 计算稳态后平均残差
+    return pre_norm, post_norm  # 返回残差均值
+
 # ============================================================================
 # STEP 3: 损失函数
 # ============================================================================
 def loss_fn(x, verbose=False):
-    p = apply_params(x)
-    t_eval = np.linspace(0, T_END, 301)
-    sol = solve(y0, p, t_eval)
+    p = apply_params(x)  # 将θ还原为实际参数
+    t_eval = np.linspace(0, T_END, 301)  # 设置时间网格
+    sol = solve(y0, p, t_eval)  # 求解ODE轨迹
     
     if sol is None or np.isnan(sol).any() or np.isinf(sol).any():
         return 1e12
     if (sol < -1e-6).any():
         return 1e12
     
-    # 取 t > T_STEADY 的平均值作为稳态
-    mask = t_eval >= T_STEADY
-    y_ss = sol[mask].mean(axis=0)
-    
-    # 混合损失：细胞用相对误差，细胞因子和IgG4用log误差
-    loss = 0.0
-    eps = 1e-12
-    
-    # 细胞类变量（L2相对误差）
-    cell_vars = ["mDC", "pDC", "naive_CD4", "act_CD4", "Th2", "iTreg", 
-                 "CD4_CTL", "nTreg", "TFH", "CD56 NK", "CD16 NK",
-                 "Naive_B", "Act_B", "TD Plasma", "TI Plasma"]
-    for v in cell_vars:
-        i = IDX[v]
-        target = target_y[i]
-        actual = y_ss[i]
-        if target > 0:
-            loss += ((actual - target) / (target + 1)) ** 2
-    
-    # 细胞因子和IgG4（log误差）
-    log_vars = ["GMCSF", "IL_33", "IL_6", "IL_12", "IL_15", "IL_7", "IFN1",
-                "IL_1", "IL_2", "IL_4", "IL_10", "TGFbeta", "IFN_g", "IgG4"]
-    for v in log_vars:
-        i = IDX[v]
-        target = target_y[i]
-        actual = y_ss[i]
-        loss += (np.log10(actual + eps) - np.log10(target + eps)) ** 2
+    pre_norm, post_norm = compute_residual_norms(t_eval, sol, p)  # 计算不同阶段残差
+    loss = pre_norm + post_norm  # 仅以两段残差作为优化目标
     
     if verbose:
-        print(f"Loss={loss:.2e}, IgG4: {y_ss[IDX['IgG4']]:.2f} (target={target_y[IDX['IgG4']]:.2f})")
+        print(f"Loss={loss:.2e}, pre_norm={pre_norm:.2e}, post_norm={post_norm:.2e}")
     
     return loss
 
 # ============================================================================
-# STEP 4: 优化
+# STEP 4: 多起点优化（Basinhopping）
 # ============================================================================
 print("\n" + "="*70)
-print("开始优化...")
+print("开始多起点Basinhopping优化...")
 print("="*70)
 
-# 回调函数显示进度
-iter_count = [0]
-def callback(x):
-    iter_count[0] += 1
-    if iter_count[0] % 50 == 0:
-        l = loss_fn(x)
-        print(f"  Iter {iter_count[0]}: loss={l:.4e}")
+# Basinhopping设置
+minimizer_kwargs = {  # 配置局部优化器参数
+    "method": "L-BFGS-B",  # 选择带约束的一阶方法
+    "bounds": theta_bounds,  # 指定θ的范围
+}
 
-result = minimize(
-    loss_fn, x0,
-    method='L-BFGS-B',
-    bounds=theta_bounds,
-    callback=callback,
-    options={'maxiter': 1000, 'ftol': 1e-8, 'disp': False}
-)
+multi_results = []  # 存放满足条件的解
+max_attempts = 30  # 设定最大尝试次数
 
-print(f"\n优化完成!")
-print(f"  迭代次数: {result.nit}")
-print(f"  最终损失: {result.fun:.4e}")
-print(f"  成功: {result.success}")
+for attempt in range(max_attempts):  # 逐次尝试不同初始点
+    seed_val = attempt  # 固定随机种子以便复现
+    print(f"尝试 {attempt + 1}/{max_attempts}，随机种子={seed_val}")  # 输出当前尝试信息
+    bh_result = basinhopping(  # 调用Basinhopping全局搜索
+        loss_fn, x0,
+        niter=200,
+        minimizer_kwargs=minimizer_kwargs,
+        seed=seed_val,
+        stepsize=0.5,
+    )
+
+    x_candidate = bh_result.x  # 提取候选θ
+    p_candidate = apply_params(x_candidate)  # 转换为实际参数
+    t_eval_dense = np.linspace(0, T_END, 601)  # 使用更细的时间网格复核
+    sol_candidate = solve(y0, p_candidate, t_eval_dense)  # 计算轨迹
+
+    if sol_candidate is None:  # 如果求解失败则跳过
+        print("  轨迹求解失败，跳过")
+        continue
+
+    pre_norm, post_norm = compute_residual_norms(t_eval_dense, sol_candidate, p_candidate)  # 评估残差
+    final_loss = loss_fn(x_candidate)  # 计算最终损失
+    print(f"  损失={final_loss:.3e}，前残差={pre_norm:.3e}，后残差={post_norm:.3e}")  # 输出评估结果
+
+    if pre_norm <= RESIDUAL_TARGET and post_norm <= RESIDUAL_TARGET:  # 检查残差是否满足要求
+        multi_results.append({  # 记录解及其信息
+            "result": bh_result,
+            "params": p_candidate,
+            "solution": sol_candidate,
+            "pre_norm": pre_norm,
+            "post_norm": post_norm,
+            "loss": final_loss,
+        })
+        print(f"  已找到满足条件的第 {len(multi_results)} 组参数")  # 输出累积数量
+        if len(multi_results) >= 3:  # 收集到三组后结束
+            break
+
+if len(multi_results) < 3:  # 判断是否成功收集足够解
+    print("未能找到满足条件的三组参数，请考虑调整阈值或增加尝试次数")
+
+# 选取最优解用于后续展示
+if multi_results:  # 若已找到解则选出最优
+    best_entry = min(multi_results, key=lambda x: x["loss"])  # 按损失排序获取最优解
+    x_opt = best_entry["result"].x  # 取出最优θ
+    p_opt = best_entry["params"]  # 取出最优参数
+    sol_opt = best_entry["solution"]  # 取出最优轨迹
+else:  # 若没有满足条件的解
+    x_opt = x0  # 无解时退回初始猜测
+    p_opt = apply_params(x0)  # 返回初始参数
+    sol_opt = solve(y0, p_opt, np.linspace(0, T_END, 601))  # 求解初始轨迹
 
 # ============================================================================
 # STEP 5: 验证并保存
 # ============================================================================
-x_opt = result.x
-p_opt = apply_params(x_opt)
 
 # 验证最终轨迹
-t_eval = np.linspace(0, T_END, 601)
-sol_opt = solve(y0, p_opt, t_eval)
-y_final = sol_opt[t_eval >= T_STEADY].mean(axis=0)
+t_eval = np.linspace(0, T_END, 601)  # 使用细时间网格
+sol_opt = solve(y0, p_opt, t_eval)  # 计算最优轨迹
+y_final = sol_opt[t_eval >= T_STEADY].mean(axis=0)  # 取稳态平均
+pre_res_opt, post_res_opt = compute_residual_norms(t_eval, sol_opt, p_opt)  # 记录最优解的残差状况
 
 print("\n" + "="*70)
 print("优化结果验证")
@@ -246,6 +273,16 @@ for v in key_vars:
         dev = 0 if actual < 1 else float('inf')
     print(f"{v:<15} {target:<12.2e} {actual:<12.2e} {dev:<10.1f}")
 
+print(f"前段残差均值: {pre_res_opt:.4e}")  # 输出刺激前残差
+print(f"后段残差均值: {post_res_opt:.4e}")  # 输出稳态后残差
+
+if multi_results:  # 如果存在满足条件的解则输出摘要
+    print("\n" + "="*70)
+    print("多解摘要")
+    print("="*70)
+    for idx, entry in enumerate(multi_results, 1):  # 遍历每组解
+        print(f"解#{idx}: 损失={entry['loss']:.3e}, 前残差={entry['pre_norm']:.3e}, 后残差={entry['post_norm']:.3e}")
+
 # ============================================================================
 # STEP 6: 保存优化参数到 utils.py
 # ============================================================================
@@ -256,29 +293,34 @@ print("="*70)
 with open('utils.py', 'r', encoding='utf-8') as f:
     content = f.read()
 
-# 删除旧的 param_optimized
-if 'def param_optimized():' in content:
-    start = content.find('def param_optimized():')
-    end = content.find('\ndef ', start + 1)
-    if end == -1:
-        end = len(content)
-    content = content[:start] + content[end:]
+# 删除旧的 param_optimized 或 param_optimized_candidates
+for signature in ('def param_optimized():', 'def param_optimized_candidates():'):
+    if signature in content:
+        start = content.find(signature)
+        end = content.find('\ndef ', start + 1)
+        if end == -1:
+            end = len(content)
+        content = content[:start] + content[end:]
 
-# 生成新函数
-lines = ["\ndef param_optimized():", 
-         '    """优化后的参数 (HC→IgG with antigen)"""',
-         "    p = {}"]
-for n in sorted(p_opt.keys()):
-    lines.append(f'    p["{n}"] = {p_opt[n]:.10e}')
-lines.append("    return p\n")
+lines = ["\ndef param_optimized_candidates():",  # 定义新的候选参数函数
+         '    """返回Basinhopping找到的候选参数列表"""',
+         "    candidates = []"]
 
-content = content.rstrip() + "\n" + "\n".join(lines)
+for entry in multi_results if multi_results else [{"params": p_opt}]:  # 遍历候选参数集合
+    lines.append("    params = {}")  # 为每个候选解创建字典
+    for n in sorted(entry["params"].keys()):  # 保持参数名排序
+        lines.append(f'    params["{n}"] = {entry["params"][n]:.10e}')  # 写入参数值
+    lines.append("    candidates.append(params)")  # 将参数集加入列表
+    lines.append("")  # 插入空行增强可读性
 
-with open('utils.py', 'w', encoding='utf-8') as f:
+lines.append("    return candidates\n")  # 返回所有候选解
+
+content = content.rstrip() + "\n" + "\n".join(lines)  # 将新函数拼接回utils
+
+with open('utils.py', 'w', encoding='utf-8') as f:  # 写回utils文件
     f.write(content)
 
-print("已保存 param_optimized() 到 utils.py")
-
+print("已保存 param_optimized_candidates() 到 utils.py")
 # ============================================================================
 # STEP 7: 绘图
 # ============================================================================
