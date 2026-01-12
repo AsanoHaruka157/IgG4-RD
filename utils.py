@@ -442,6 +442,25 @@ def param():
     
     return params
 
+
+def HC_param() -> Dict[str, float]:
+    """返回HC稳态使用的参数字典（为后续修改提供副本）。"""
+    params = param()  # 生成一份基础参数副本
+    return params  # 返回副本
+
+
+def IgG_param() -> Dict[str, float]:
+    """返回IgG诱导阶段的参数初值（当前与HC一致，可在此基础上调整）。"""
+    params = param()  # 先获取基础参数
+    return params  # 直接返回，可在外部按需修改
+
+
+def rhs_hc(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
+    """在健康对照情境下计算RHS（固定抗原为0）。"""
+    y_mod = y.copy()  # 复制原始状态以避免原地修改
+    y_mod[IDX["Antigen"]] = 0.0  # 强制抗原浓度为0保持稳态背景
+    return rhs(t, y_mod, p)  # 调用通用RHS求导
+
 def rhs(t: float, y: np.ndarray, p: Dict[str, float]) -> np.ndarray:
     """
     HC稳态下的RHS方程（Antigen 取自状态向量 y[Antigen]）

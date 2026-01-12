@@ -10,7 +10,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
 from utils import (
-    rhs_hc, HC_state, IgG_param, IgG_state,
+    rhs as rhs_base, HC_state, IgG_param, IgG_state,
     STATE_NAMES, IDX, ALL_PARAMS,
 )
 
@@ -37,6 +37,11 @@ y0 = np.array([HC_state()[name] for name in STATE_NAMES])
 target_dict = IgG_state()
 target_y = np.array([target_dict[name] for name in STATE_NAMES])
 
+# 依据HC与IgG目标的量级构建每个状态的残差归一化尺度
+scale_base = np.maximum(np.abs(y0), np.abs(target_y))  # 取两端最大幅值
+scale_base = np.maximum(scale_base, np.ones_like(scale_base))  # 至少保证尺度为1
+RESIDUAL_SCALE_VEC = RESIDUAL_ALPHA * scale_base + RESIDUAL_BETA  # 依照α、β得到最终尺度
+
 # 参考稳态用于设置容量参数的中心值
 hc_ref = HC_state()
 igg_ref = IgG_state()
@@ -51,6 +56,8 @@ p_names = [n for n in ALL_PARAMS if n in p_init]
 BASE_FLOOR = 1e-8
 RESIDUAL_TOL = 1e-4  # 设定RHS残差的理想上限
 RESIDUAL_TARGET = 5e-5  # 设定多解筛选的更严格阈值
+RESIDUAL_ALPHA = 1.0  # 归一化尺度的α
+RESIDUAL_BETA = 1e-6  # 归一化尺度的β偏移
 CARRYING_CAPACITY_MAP = {
     "k_nDC_m": "nDC",
     "k_mDC_m": "mDC",
@@ -120,17 +127,17 @@ def antigen(t):
         return (t - T_ANTIGEN_START) / (T_ANTIGEN_END - T_ANTIGEN_START)
     return 1.0
 
-def rhs(t, y, p):
+def rhs_wrapper(t, y, p):
     y_mod = y.copy()
     y_mod[0] = antigen(t)
-    dydt = rhs_hc(t, y_mod, p)
+    dydt = rhs_base(t, y_mod, p)
     dydt[0] = 1.0 / (T_ANTIGEN_END - T_ANTIGEN_START) if T_ANTIGEN_START <= t <= T_ANTIGEN_END else 0.0
     return dydt
 
 def solve(y0, p, t_eval):
     for method in ("BDF", "Radau"):
         try:
-            sol = solve_ivp(lambda t, y: rhs(t, y, p), (t_eval[0], t_eval[-1]), 
+            sol = solve_ivp(lambda t, y: rhs_wrapper(t, y, p), (t_eval[0], t_eval[-1]), 
                            y0, method=method, t_eval=t_eval, rtol=1e-5, atol=1e-8)
             if sol.success:
                 return sol.y.T
@@ -146,17 +153,18 @@ def apply_params(x):
         p[n] = np.exp(theta)
     return p
 
-def compute_residual_norms(t_eval, sol, p):
-    """计算系统在不同时间段的RHS残差范数。"""
+def compute_residual_vectors(t_eval, sol, p):
+    """计算两端时间窗口内的平均RHS残差向量。"""
     rhs_vals = np.zeros_like(sol)  # 为RHS计算预分配数组
     for idx, t in enumerate(t_eval):  # 遍历时间节点
-        rhs_vals[idx] = rhs(t, sol[idx], p)  # 针对每个时间节点计算RHS
-    norms = np.linalg.norm(rhs_vals, axis=1)  # 逐点计算向量范数
+        rhs_vals[idx] = rhs_wrapper(t, sol[idx], p)  # 针对每个时间节点计算RHS
     pre_mask = t_eval < T_ANTIGEN_START  # 标记刺激前时间段
     post_mask = t_eval >= T_STEADY  # 标记稳态评估时间段
-    pre_norm = norms[pre_mask].mean() if pre_mask.any() else np.inf  # 计算刺激前平均残差
-    post_norm = norms[post_mask].mean() if post_mask.any() else np.inf  # 计算稳态后平均残差
-    return pre_norm, post_norm  # 返回残差均值
+    if not pre_mask.any() or not post_mask.any():  # 若窗口为空则返回无穷惩罚
+        return None, None
+    pre_vec = rhs_vals[pre_mask].mean(axis=0)  # 刺激前平均残差向量
+    post_vec = rhs_vals[post_mask].mean(axis=0)  # 稳态后平均残差向量
+    return pre_vec, post_vec  # 返回两段残差
 
 # ============================================================================
 # STEP 3: 损失函数
@@ -171,9 +179,17 @@ def loss_fn(x, verbose=False):
     if (sol < -1e-6).any():
         return 1e12
     
-    pre_norm, post_norm = compute_residual_norms(t_eval, sol, p)  # 计算不同阶段残差
-    loss = pre_norm + post_norm  # 仅以两段残差作为优化目标
-    
+    pre_vec, post_vec = compute_residual_vectors(t_eval, sol, p)  # 计算不同阶段残差向量
+    if pre_vec is None or post_vec is None:  # 若窗口无效则返回惩罚
+        return 1e12
+    if not (np.isfinite(pre_vec).all() and np.isfinite(post_vec).all()):  # 防止出现NaN/Inf
+        return 1e12
+    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC  # 对刺激前残差做归一化
+    post_scaled = post_vec / RESIDUAL_SCALE_VEC  # 对稳态后残差做归一化
+    loss = np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2)  # 两端归一化平方残差求和
+    pre_norm = np.linalg.norm(pre_vec)  # 保留原始范数用于调试输出
+    post_norm = np.linalg.norm(post_vec)
+
     if verbose:
         print(f"Loss={loss:.2e}, pre_norm={pre_norm:.2e}, post_norm={post_norm:.2e}")
     
@@ -215,7 +231,12 @@ for attempt in range(max_attempts):  # 逐次尝试不同初始点
         print("  轨迹求解失败，跳过")
         continue
 
-    pre_norm, post_norm = compute_residual_norms(t_eval_dense, sol_candidate, p_candidate)  # 评估残差
+    pre_vec, post_vec = compute_residual_vectors(t_eval_dense, sol_candidate, p_candidate)  # 评估残差向量
+    if pre_vec is None or post_vec is None:  # 若窗口不完整则跳过
+        print("  残差窗口无效，跳过")
+        continue
+    pre_norm = np.linalg.norm(pre_vec)  # 计算刺激前残差范数
+    post_norm = np.linalg.norm(post_vec)  # 计算稳态后残差范数
     final_loss = loss_fn(x_candidate)  # 计算最终损失
     print(f"  损失={final_loss:.3e}，前残差={pre_norm:.3e}，后残差={post_norm:.3e}")  # 输出评估结果
 
@@ -254,7 +275,9 @@ else:  # 若没有满足条件的解
 t_eval = np.linspace(0, T_END, 601)  # 使用细时间网格
 sol_opt = solve(y0, p_opt, t_eval)  # 计算最优轨迹
 y_final = sol_opt[t_eval >= T_STEADY].mean(axis=0)  # 取稳态平均
-pre_res_opt, post_res_opt = compute_residual_norms(t_eval, sol_opt, p_opt)  # 记录最优解的残差状况
+pre_vec_opt, post_vec_opt = compute_residual_vectors(t_eval, sol_opt, p_opt)  # 记录最优解的残差向量
+pre_res_opt = np.linalg.norm(pre_vec_opt) if pre_vec_opt is not None else float("inf")  # 计算前段范数
+post_res_opt = np.linalg.norm(post_vec_opt) if post_vec_opt is not None else float("inf")  # 计算后段范数
 
 print("\n" + "="*70)
 print("优化结果验证")
@@ -273,8 +296,8 @@ for v in key_vars:
         dev = 0 if actual < 1 else float('inf')
     print(f"{v:<15} {target:<12.2e} {actual:<12.2e} {dev:<10.1f}")
 
-print(f"前段残差均值: {pre_res_opt:.4e}")  # 输出刺激前残差
-print(f"后段残差均值: {post_res_opt:.4e}")  # 输出稳态后残差
+print(f"前段残差范数: {pre_res_opt:.4e}")  # 输出刺激前残差范数
+print(f"后段残差范数: {post_res_opt:.4e}")  # 输出稳态后残差范数
 
 if multi_results:  # 如果存在满足条件的解则输出摘要
     print("\n" + "="*70)
