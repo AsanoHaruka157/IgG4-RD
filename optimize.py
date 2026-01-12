@@ -37,17 +37,72 @@ y0 = np.array([HC_state()[name] for name in STATE_NAMES])
 target_dict = IgG_state()
 target_y = np.array([target_dict[name] for name in STATE_NAMES])
 
+# 参考稳态用于设置容量参数的中心值
+hc_ref = HC_state()
+igg_ref = IgG_state()
+
 # 初始参数（基于文献参考值）
 p_init = IgG_param()
 
 # 需要优化的参数
 p_names = [n for n in ALL_PARAMS if n in p_init]
 
-# 参数重参数化：k = k0 * 10^x, x ∈ [-2, 2]
+# 参数重参数化：k = k0 * 10^x，其中 x 受分组约束
 BASE_FLOOR = 1e-8
-p_base = {n: max(p_init[n], BASE_FLOOR) for n in p_names}
-bounds = [(-2.0, 2.0) for _ in p_names]
+CARRYING_CAPACITY_MAP = {
+    "k_nDC_m": "nDC",
+    "k_mDC_m": "mDC",
+    "k_pDC_m": "pDC",
+    "k_CD4_m": "naive_CD4",
+    "k_act_CD4_m": "act_CD4",
+    "k_Th2_m": "Th2",
+    "k_iTreg_m": "iTreg",
+    "k_CD4_CTL_m": "CD4_CTL",
+    "k_nTreg_m": "nTreg",
+    "k_TFH_m": "TFH",
+    "k_NK_m": "NK",
+    "k_act_NK_m": "act_NK",
+    "k_Naive_B_m": "Naive_B",
+    "k_Act_B_m": "Act_B",
+    "k_TD_m": "TD_IS_B",
+    "k_TI_m": "TI_IS_B",
+}
+
+def carrying_reference(state_name: str) -> float:
+    """根据HC/IgG目标挑选容量参数的参考量级。"""
+    return max(hc_ref.get(state_name, 0.0), igg_ref.get(state_name, 0.0), 1.0)
+
+theta_bounds = []
 x0 = np.zeros(len(p_names))
+for idx, name in enumerate(p_names):
+    raw = max(p_init.get(name, 0.0), BASE_FLOOR)
+
+    if name.endswith("_d"):
+        lower, upper = 0.05, 5.0
+    elif name.endswith("_f"):
+        lower, upper = 0.01, 20.0
+    elif name.endswith("_m"):
+        if name in CARRYING_CAPACITY_MAP:
+            state_name = CARRYING_CAPACITY_MAP[name]
+            target_val = target_dict.get(state_name)
+            if target_val is None or target_val <= 0:
+                target_val = carrying_reference(state_name)
+            target_val = max(target_val, 1.0)
+            lower, upper = 0.5 * target_val, 5.0 * target_val
+        else:
+            lower, upper = 1e3, 1e6
+    else:
+        base_val = raw
+        lower = max(base_val * 0.1, BASE_FLOOR)
+        upper = max(base_val * 10.0, lower * 10.0)
+
+    lower = max(lower, BASE_FLOOR)
+    if upper <= lower:
+        upper = lower * 10.0
+
+    theta_bounds.append((np.log(lower), np.log(upper)))
+    init_val = np.clip(raw, lower, upper)
+    x0[idx] = np.log(init_val)
 
 print(f"初始条件: HC_state (IgG4={y0[IDX['IgG4']]:.1f})")
 print(f"目标: IgG_state (IgG4={target_y[IDX['IgG4']]:.1f})")
@@ -84,7 +139,9 @@ def solve(y0, p, t_eval):
 def apply_params(x):
     p = dict(p_init)
     for i, n in enumerate(p_names):
-        p[n] = p_base[n] * (10.0 ** np.clip(x[i], -2, 2))
+        lb, ub = theta_bounds[i]
+        theta = np.clip(x[i], lb, ub)
+        p[n] = np.exp(theta)
     return p
 
 # ============================================================================
@@ -151,7 +208,7 @@ def callback(x):
 result = minimize(
     loss_fn, x0,
     method='L-BFGS-B',
-    bounds=bounds,
+    bounds=theta_bounds,
     callback=callback,
     options={'maxiter': 1000, 'ftol': 1e-8, 'disp': False}
 )
