@@ -9,6 +9,9 @@ from scipy.optimize import basinhopping
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
+import torch
+from pytorch import rhs_torch, simulate_torch_grad, TORCHDIFFEQ_AVAILABLE
+
 from utils import (
     rhs as rhs_base, HC_state, IgG_param, IgG_state,
     STATE_NAMES, IDX, ALL_PARAMS,
@@ -21,6 +24,13 @@ T_END = 300.0          # 模拟总时间
 T_ANTIGEN_START = 100  # 抗原刺激开始
 T_ANTIGEN_END = 150    # 抗原刺激结束（线性爬升）
 T_STEADY = 200         # 稳态评估起始时间
+
+# 归一化与约束配置
+BASE_FLOOR = 1e-8
+RESIDUAL_TOL = 1e-4      # RHS残差的理想上限
+RESIDUAL_TARGET = 5e-5    # 多解筛选阈值
+RESIDUAL_ALPHA = 1.0
+RESIDUAL_BETA = 1e-6
 
 # ============================================================================
 # STEP 1: 准备
@@ -41,6 +51,8 @@ target_y = np.array([target_dict[name] for name in STATE_NAMES])
 scale_base = np.maximum(np.abs(y0), np.abs(target_y))  # 取两端最大幅值
 scale_base = np.maximum(scale_base, np.ones_like(scale_base))  # 至少保证尺度为1
 RESIDUAL_SCALE_VEC = RESIDUAL_ALPHA * scale_base + RESIDUAL_BETA  # 依照α、β得到最终尺度
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+RESIDUAL_SCALE_VEC_T = torch.tensor(RESIDUAL_SCALE_VEC, dtype=torch.float64, device=DEVICE)
 
 # 参考稳态用于设置容量参数的中心值
 hc_ref = HC_state()
@@ -53,11 +65,6 @@ p_init = IgG_param()
 p_names = [n for n in ALL_PARAMS if n in p_init]
 
 # 参数重参数化：k = k0 * 10^x，其中 x 受分组约束
-BASE_FLOOR = 1e-8
-RESIDUAL_TOL = 1e-4  # 设定RHS残差的理想上限
-RESIDUAL_TARGET = 5e-5  # 设定多解筛选的更严格阈值
-RESIDUAL_ALPHA = 1.0  # 归一化尺度的α
-RESIDUAL_BETA = 1e-6  # 归一化尺度的β偏移
 CARRYING_CAPACITY_MAP = {
     "k_nDC_m": "nDC",
     "k_mDC_m": "mDC",
@@ -134,16 +141,44 @@ def rhs_wrapper(t, y, p):
     dydt[0] = 1.0 / (T_ANTIGEN_END - T_ANTIGEN_START) if T_ANTIGEN_START <= t <= T_ANTIGEN_END else 0.0
     return dydt
 
-def solve(y0, p, t_eval):
+def solve_scipy(y0, p, t_eval):
     for method in ("BDF", "Radau"):
         try:
-            sol = solve_ivp(lambda t, y: rhs_wrapper(t, y, p), (t_eval[0], t_eval[-1]), 
-                           y0, method=method, t_eval=t_eval, rtol=1e-5, atol=1e-8)
+            sol = solve_ivp(lambda t, y: rhs_wrapper(t, y, p), (t_eval[0], t_eval[-1]),
+                            y0, method=method, t_eval=t_eval, rtol=1e-5, atol=1e-8)
             if sol.success:
                 return sol.y.T
-        except:
+        except Exception:
             continue
     return None
+
+
+def solve_torch(y0, p, t_eval):
+    """使用torchdiffeq求解；失败时返回None让上层回退到scipy。"""
+    if not TORCHDIFFEQ_AVAILABLE:
+        return None
+    try:
+        t_torch = torch.tensor(t_eval, dtype=torch.float64, device=DEVICE)
+        y0_torch = torch.tensor(y0, dtype=torch.float64, device=DEVICE)
+        p_torch = {}
+        for k, v in p.items():
+            val = float(v)
+            if k in ("k_IgG4_TI_f", "k_IgG4_TD_f"):
+                val *= 1e-8  # 抵消 rhs_torch 内部的 1e8 缩放
+            p_torch[k] = torch.tensor(val, dtype=torch.float64, device=DEVICE)
+        sol_t = simulate_torch_grad(t_torch, y0_torch, p_torch)
+        sol_np = sol_t.detach().cpu().numpy()
+        return sol_np
+    except Exception as exc:
+        print(f"torchdiffeq求解失败，回退scipy: {type(exc).__name__}: {exc}")
+        return None
+
+
+def solve(y0, p, t_eval):
+    sol = solve_torch(y0, p, t_eval)
+    if sol is not None:
+        return sol
+    return solve_scipy(y0, p, t_eval)
 
 def apply_params(x):
     p = dict(p_init)
@@ -151,6 +186,23 @@ def apply_params(x):
         lb, ub = theta_bounds[i]
         theta = np.clip(x[i], lb, ub)
         p[n] = np.exp(theta)
+    return p
+
+
+def apply_params_torch(x_torch: torch.Tensor):
+    """将log参数Tensor映射为torch参数字典（保留requires_grad）。"""
+    p = {}
+    for i, n in enumerate(p_names):
+        lb, ub = theta_bounds[i]
+        theta = torch.clamp(x_torch[i], min=lb, max=ub)
+        val = torch.exp(theta)
+        if n in ("k_IgG4_TI_f", "k_IgG4_TD_f"):
+            val = val * 1e-8  # torch版RHS内部有1e8缩放，保持与utils.rhs一致的实际放大倍数
+        p[n] = val
+    # 填充未优化的参数为常量1.0（不需要梯度）
+    for n in p_init:
+        if n not in p:
+            p[n] = torch.tensor(float(p_init[n]), dtype=torch.float64, device=DEVICE)
     return p
 
 def compute_residual_vectors(t_eval, sol, p):
@@ -166,34 +218,94 @@ def compute_residual_vectors(t_eval, sol, p):
     post_vec = rhs_vals[post_mask].mean(axis=0)  # 稳态后平均残差向量
     return pre_vec, post_vec  # 返回两段残差
 
+
+def compute_residual_vectors_torch(t_eval_t: torch.Tensor, sol_t: torch.Tensor, p_t: dict):
+    """torch版本的残差向量计算，用于自动微分。"""
+    rhs_vals = []
+    for idx, t in enumerate(t_eval_t):
+        rhs_vals.append(rhs_torch(float(t), sol_t[idx], p_t))
+    rhs_stack = torch.stack(rhs_vals, dim=0)
+    pre_mask = t_eval_t < T_ANTIGEN_START
+    post_mask = t_eval_t >= T_STEADY
+    if not bool(pre_mask.any()) or not bool(post_mask.any()):
+        return None, None
+    pre_vec = rhs_stack[pre_mask].mean(dim=0)
+    post_vec = rhs_stack[post_mask].mean(dim=0)
+    return pre_vec, post_vec
+
 # ============================================================================
-# STEP 3: 损失函数
+# STEP 3: 损失函数（torch自动微分 + torchdiffeq）
 # ============================================================================
-def loss_fn(x, verbose=False):
-    p = apply_params(x)  # 将θ还原为实际参数
-    t_eval = np.linspace(0, T_END, 301)  # 设置时间网格
-    sol = solve(y0, p, t_eval)  # 求解ODE轨迹
-    
-    if sol is None or np.isnan(sol).any() or np.isinf(sol).any():
-        return 1e12
-    if (sol < -1e-6).any():
-        return 1e12
-    
-    pre_vec, post_vec = compute_residual_vectors(t_eval, sol, p)  # 计算不同阶段残差向量
-    if pre_vec is None or post_vec is None:  # 若窗口无效则返回惩罚
-        return 1e12
-    if not (np.isfinite(pre_vec).all() and np.isfinite(post_vec).all()):  # 防止出现NaN/Inf
-        return 1e12
-    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC  # 对刺激前残差做归一化
-    post_scaled = post_vec / RESIDUAL_SCALE_VEC  # 对稳态后残差做归一化
-    loss = np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2)  # 两端归一化平方残差求和
-    pre_norm = np.linalg.norm(pre_vec)  # 保留原始范数用于调试输出
-    post_norm = np.linalg.norm(post_vec)
+LAST_EVAL = {"x": None, "val": None, "grad": None}
+
+
+def loss_and_grad(x, verbose=False):
+    """返回 (loss, grad)。默认使用torchdiffeq + autograd，失败时返回大惩罚。"""
+    if not TORCHDIFFEQ_AVAILABLE:
+        # 回退：无梯度版本，仅保证不崩溃
+        p = apply_params(x)
+        t_eval = np.linspace(0, T_END, 301)
+        sol = solve_scipy(y0, p, t_eval)
+        if sol is None or np.isnan(sol).any() or np.isinf(sol).any():
+            return 1e12, np.zeros_like(x)
+        pre_vec, post_vec = compute_residual_vectors(t_eval, sol, p)
+        if pre_vec is None or post_vec is None:
+            return 1e12, np.zeros_like(x)
+        pre_scaled = pre_vec / RESIDUAL_SCALE_VEC
+        post_scaled = post_vec / RESIDUAL_SCALE_VEC
+        loss = np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2)
+        return loss, np.zeros_like(x)
+
+    x_np = np.asarray(x, dtype=float)
+    x_torch = torch.tensor(x_np, dtype=torch.float64, device=DEVICE, requires_grad=True)
+    p_torch = apply_params_torch(x_torch)
+    t_eval_t = torch.linspace(0.0, T_END, steps=301, dtype=torch.float64, device=DEVICE)
+    y0_t = torch.tensor(y0, dtype=torch.float64, device=DEVICE)
+
+    try:
+        sol_t = simulate_torch_grad(t_eval_t, y0_t, p_torch)
+    except Exception:
+        return 1e12, np.zeros_like(x_np)
+
+    if torch.isnan(sol_t).any() or torch.isinf(sol_t).any() or bool((sol_t < -1e-6).any()):
+        return 1e12, np.zeros_like(x_np)
+
+    pre_vec, post_vec = compute_residual_vectors_torch(t_eval_t, sol_t, p_torch)
+    if pre_vec is None or post_vec is None:
+        return 1e12, np.zeros_like(x_np)
+    if not (torch.isfinite(pre_vec).all() and torch.isfinite(post_vec).all()):
+        return 1e12, np.zeros_like(x_np)
+
+    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC_T
+    post_scaled = post_vec / RESIDUAL_SCALE_VEC_T
+    loss_t = torch.sum(pre_scaled ** 2) + torch.sum(post_scaled ** 2)
+    loss_val = loss_t.detach().cpu().item()
+    loss_t.backward()
+    grad = x_torch.grad.detach().cpu().numpy()
 
     if verbose:
-        print(f"Loss={loss:.2e}, pre_norm={pre_norm:.2e}, post_norm={post_norm:.2e}")
-    
-    return loss
+        pre_norm = pre_vec.norm().detach().cpu().item()
+        post_norm = post_vec.norm().detach().cpu().item()
+        print(f"Loss={loss_val:.2e}, pre_norm={pre_norm:.2e}, post_norm={post_norm:.2e}")
+
+    return loss_val, grad
+
+
+def loss_fn(x, verbose=False):
+    val, grad = loss_and_grad(x, verbose)
+    LAST_EVAL["x"] = np.array(x, copy=True)
+    LAST_EVAL["val"] = val
+    LAST_EVAL["grad"] = grad
+    return val
+
+
+def loss_grad(x):
+    if LAST_EVAL["x"] is not None and np.allclose(x, LAST_EVAL["x"]):
+        return LAST_EVAL["grad"]
+    _, grad = loss_and_grad(x)
+    LAST_EVAL["x"] = np.array(x, copy=True)
+    LAST_EVAL["grad"] = grad
+    return grad
 
 # ============================================================================
 # STEP 4: 多起点优化（Basinhopping）
@@ -205,6 +317,7 @@ print("="*70)
 # Basinhopping设置
 minimizer_kwargs = {  # 配置局部优化器参数
     "method": "L-BFGS-B",  # 选择带约束的一阶方法
+    "jac": loss_grad,  # 使用torch自动微分梯度
     "bounds": theta_bounds,  # 指定θ的范围
 }
 
