@@ -1,24 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-IgG4-RD 参数优化脚本
-目标：找到参数使系统从 HC_state 在抗原刺激后演化到 IgG_state
+IgG4-RD 参数优化脚本（SciPy版）
+目标：使用 solve_ivp (BDF) + 显式敏感度方程获取梯度，再用 L-BFGS-B 优化。
 """
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.optimize import minimize
 import matplotlib.pyplot as plt
-
-import torch
-from pytorch import rhs_torch, simulate_torch_grad, TORCHDIFFEQ_AVAILABLE
-
-try:
-    import nevergrad as ng
-    NG_AVAILABLE = True
-except ImportError:
-    NG_AVAILABLE = False
-    print("Warning: nevergrad not available, will fall back to scipy differential_evolution")
-
-from scipy.optimize import differential_evolution, minimize
 
 from utils import (
     rhs as rhs_base, HC_state, IgG_param, IgG_state,
@@ -31,62 +20,54 @@ from utils import (
 T_END = 300.0          # 模拟总时间
 T_ANTIGEN_START = 100  # 抗原刺激开始
 T_ANTIGEN_END = 150    # 抗原刺激结束（线性爬升）
-# 平滑抗原激活：sigmoid 中心与温度（越小越陡）
 ANTIGEN_CENTER = 0.5 * (T_ANTIGEN_START + T_ANTIGEN_END)
 ANTIGEN_TEMP = 5.0
 T_STEADY = 200         # 稳态评估起始时间
-T_EVAL_STEPS = 151     # 积分时间网格点数（Stage A 粗网格即可，进一步降采样提速）
+T_EVAL_STEPS = 151     # 时间网格点数（越小越快）
+T_EVAL_COARSE = 81     # 全局随机筛选用的更粗网格
 
 # 归一化与约束配置
 BASE_FLOOR = 1e-8
-RESIDUAL_TOL = 1e-4      # RHS残差的理想上限
-RESIDUAL_TARGET = 1e-3    # 多解筛选阈值（放宽以加快测试）
+RESIDUAL_TOL = 1e-4      # RHS残差的理想上限（用于早停/惩罚）
+RESIDUAL_TARGET = 1e-4    # 筛选阈值
 RESIDUAL_ALPHA = 1.0
 RESIDUAL_BETA = 1e-6
+
+# 数值微分步长（状态/参数方向）
+EPS_Y = 1e-6
+EPS_THETA = 1e-6
 
 # ============================================================================
 # STEP 1: 准备
 # ============================================================================
 print("="*70)
-print("IgG4 Parameter Optimization")
+print("IgG4 Parameter Optimization (SciPy BDF)")
 print("  HC_state → (antigen) → IgG_state")
 print("="*70)
 
-# 初始条件（用户提供的健康人参考值）
-y0 = np.array([HC_state()[name] for name in STATE_NAMES])
+# 初始条件与目标
+HC = HC_state()
+y0 = np.array([HC[name] for name in STATE_NAMES], dtype=float)
 
-# 目标状态
 target_dict = IgG_state()
-target_y = np.array([target_dict[name] for name in STATE_NAMES])
+target_y = np.array([target_dict[name] for name in STATE_NAMES], dtype=float)
 
-# 依据HC与IgG目标的量级构建每个状态的残差归一化尺度
-scale_base = np.maximum(np.abs(y0), np.abs(target_y))  # 取两端最大幅值
-scale_base = np.maximum(scale_base, np.ones_like(scale_base))  # 至少保证尺度为1
-RESIDUAL_SCALE_VEC = RESIDUAL_ALPHA * scale_base + RESIDUAL_BETA  # 依照α、β得到最终尺度
-RESIDUAL_SCALE_VEC_T = torch.tensor(RESIDUAL_SCALE_VEC, dtype=torch.float64)
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-RESIDUAL_SCALE_VEC_T = RESIDUAL_SCALE_VEC_T.to(device=DEVICE)
+# 残差尺度
+scale_base = np.maximum(np.abs(y0), np.abs(target_y))
+scale_base = np.maximum(scale_base, np.ones_like(scale_base))
+RESIDUAL_SCALE_VEC = RESIDUAL_ALPHA * scale_base + RESIDUAL_BETA
 
-# 缓存固定时间网格与初始状态，避免在每次 loss_fn 中重复创建小张量
-T_EVAL_T = torch.linspace(0.0, T_END, steps=T_EVAL_STEPS, dtype=torch.float64, device=DEVICE)
-Y0_T = torch.tensor(y0, dtype=torch.float64, device=DEVICE)
-
-# 参考稳态用于设置容量参数的中心值
+# 参考稳态
 hc_ref = HC_state()
 igg_ref = IgG_state()
 
 # 初始参数（基于文献参考值）
 p_init = IgG_param()
 
-# 常量参数torch缓存（非优化参数）
-P_CONST_TORCH = {}
-for k, v in p_init.items():
-    P_CONST_TORCH[k] = torch.tensor(float(v), dtype=torch.float64, device=DEVICE)
-
 # 需要优化的参数
 p_names = [n for n in ALL_PARAMS if n in p_init]
 
-# 参数重参数化：k = k0 * 10^x，其中 x 受分组约束
+# 参数重参数化：k = exp(theta)
 CARRYING_CAPACITY_MAP = {
     "k_nDC_m": "nDC",
     "k_mDC_m": "mDC",
@@ -107,11 +88,10 @@ CARRYING_CAPACITY_MAP = {
 }
 
 def carrying_reference(state_name: str) -> float:
-    """根据HC/IgG目标挑选容量参数的参考量级。"""
     return max(hc_ref.get(state_name, 0.0), igg_ref.get(state_name, 0.0), 1.0)
 
 theta_bounds = []
-x0 = np.zeros(len(p_names))
+x0 = np.zeros(len(p_names), dtype=float)
 for idx, name in enumerate(p_names):
     raw = max(p_init.get(name, 0.0), BASE_FLOOR)
 
@@ -147,207 +127,275 @@ print(f"目标: IgG_state (IgG4={target_y[IDX['IgG4']]:.1f})")
 print(f"优化参数: {len(p_names)}个")
 
 # ============================================================================
-# STEP 2: ODE求解器
+# STEP 2: ODE 与敏感度方程
 # ============================================================================
-def antigen(t):
-    """平滑的抗原输入，避免分段不光滑带来的刚性与梯度噪声。"""
+
+def antigen(t: float) -> float:
     return 1.0 / (1.0 + np.exp(-(t - ANTIGEN_CENTER) / ANTIGEN_TEMP))
 
-def rhs_wrapper(t, y, p):
+def rhs_wrapper(t: float, y: np.ndarray, p: dict) -> np.ndarray:
     y_mod = y.copy()
     y_mod[0] = antigen(t)
     dydt = rhs_base(t, y_mod, p)
-    # sigmoid 的导数：sigma'(x) = sigma(x)*(1-sigma(x)) / temp
     sigma = y_mod[0]
     dydt[0] = sigma * (1.0 - sigma) / ANTIGEN_TEMP
-    return dydt
+    return np.asarray(dydt, dtype=float)
 
-def solve_scipy(y0, p, t_eval):
-    for method in ("BDF", "Radau"):
-        try:
-            sol = solve_ivp(lambda t, y: rhs_wrapper(t, y, p), (t_eval[0], t_eval[-1]),
-                            y0, method=method, t_eval=t_eval, rtol=1.5e-5, atol=1.5e-8)
-            if sol.success:
-                return sol.y.T
-        except Exception:
-            continue
-    return None
-    
-
-def solve(y0, p, t_eval):
-    return solve_scipy(y0, p, t_eval)
-
-def apply_params(x):
+def apply_params(theta: np.ndarray) -> dict:
     p = dict(p_init)
     for i, n in enumerate(p_names):
         lb, ub = theta_bounds[i]
-        theta = np.clip(x[i], lb, ub)
-        p[n] = np.exp(theta)
+        val = np.exp(np.clip(theta[i], lb, ub))
+        p[n] = val
     return p
 
-
-def apply_params_torch(x_torch: torch.Tensor):
-    """将log参数Tensor映射为torch参数字典（少量对象创建）。"""
-    p = {}
-    for i, n in enumerate(p_names):
-        lb, ub = theta_bounds[i]
-        theta = torch.clamp(x_torch[i], min=lb, max=ub)
-        p[n] = torch.exp(theta)
-    for n, v in P_CONST_TORCH.items():
-        if n not in p:
-            p[n] = v
-    return p
-
-def compute_residual_vectors(t_eval, sol, p):
-    """计算两端时间窗口内的平均RHS残差向量。"""
-    rhs_vals = np.zeros_like(sol)  # 为RHS计算预分配数组
-    for idx, t in enumerate(t_eval):  # 遍历时间节点
-        rhs_vals[idx] = rhs_wrapper(t, sol[idx], p)  # 针对每个时间节点计算RHS
-    pre_mask = t_eval < T_ANTIGEN_START  # 标记刺激前时间段
-    post_mask = t_eval > T_STEADY  # 标记稳态评估时间段
-    if not pre_mask.any() or not post_mask.any():  # 若窗口为空则返回无穷惩罚
-        return None, None
-    pre_vec = rhs_vals[pre_mask].mean(axis=0)  # 刺激前平均残差向量
-    post_vec = rhs_vals[post_mask].mean(axis=0)  # 稳态后平均残差向量
-    return pre_vec, post_vec  # 返回两段残差
-
-# ============================================================================
-# STEP 3: 损失函数（Stage A：窗口平均RHS，使用 torchdiffeq 积分但无梯度）
-# ============================================================================
-LAST_EVAL = {"x": None, "val": None, "pre": None, "post": None, "traj": None, "t_eval": None}
-
-
-def loss_fn(x, verbose=False):
-    if not TORCHDIFFEQ_AVAILABLE:
-        return 1e12
-
-    x_np = np.asarray(x, dtype=float)
-    x_t = torch.tensor(x_np, dtype=torch.float64, device=DEVICE)
-    p_t = apply_params_torch(x_t)
-    # 复用全局缓存的时间网格和初始状态，减少重复张量构造
-    t_eval_t = T_EVAL_T
-    y0_t = Y0_T
-
+def solve_state_only(y0_in: np.ndarray, p: dict, t_eval: np.ndarray):
+    """仅解状态，不带敏感度，用于快速全局筛选。"""
     try:
-        with torch.no_grad():
-            # 使用显式可微求解器 dopri5（即便 no_grad，这个分支更快且无 BDF 警告）
-            sol_t = simulate_torch_grad(t_eval_t, y0_t, p_t, verbose=False, method_override="dopri5")
+        sol = solve_ivp(
+            fun=lambda t, y: rhs_wrapper(t, y, p),
+            t_span=(t_eval[0], t_eval[-1]),
+            y0=y0_in,
+            method="BDF",
+            t_eval=t_eval,
+            rtol=2e-5,
+            atol=2e-8,
+        )
+        return sol
     except Exception:
+        return None
+
+def jacobian_actions(t: float, y: np.ndarray, p: dict, S: np.ndarray) -> np.ndarray:
+    """返回 J_y*S + J_p*dp/dtheta，S shape (n, m)。"""
+    n, m = S.shape
+    out = np.zeros((n, m), dtype=float)
+    for j in range(m):
+        v = S[:, j]
+        if np.allclose(v, 0.0):
+            Jy_v = np.zeros(n, dtype=float)
+        else:
+            y_plus = y + EPS_Y * v
+            y_minus = y - EPS_Y * v
+            f_plus = rhs_wrapper(t, y_plus, p)
+            f_minus = rhs_wrapper(t, y_minus, p)
+            Jy_v = (f_plus - f_minus) / (2.0 * EPS_Y)
+
+        name = p_names[j]
+        base = p[name]
+        delta = EPS_THETA * base
+        p_plus = dict(p)
+        p_minus = dict(p)
+        p_plus[name] = base + delta
+        p_minus[name] = base - delta
+        f_p = rhs_wrapper(t, y, p_plus)
+        f_m = rhs_wrapper(t, y, p_minus)
+        Jp_col = (f_p - f_m) / (2.0 * EPS_THETA)
+
+        out[:, j] = Jy_v + Jp_col
+    return out
+
+def augmented_ode(t: float, aug: np.ndarray, p: dict, n: int, m: int) -> np.ndarray:
+    y = aug[:n]
+    S = aug[n:].reshape(n, m)
+    f = rhs_wrapper(t, y, p)
+    GS = jacobian_actions(t, y, p, S)
+    return np.concatenate([f, GS.reshape(-1)])
+
+def solve_with_sens(theta: np.ndarray, t_eval: np.ndarray):
+    p = apply_params(theta)
+    n = len(y0)
+    m = len(p_names)
+    y_init = np.zeros((n * (m + 1),), dtype=float)
+    y_init[:n] = y0
+
+    sol = solve_ivp(
+        fun=lambda t, z: augmented_ode(t, z, p, n, m),
+        t_span=(t_eval[0], t_eval[-1]),
+        y0=y_init,
+        method="BDF",
+        t_eval=t_eval,
+        rtol=1e-5,
+        atol=1e-8,
+        jac=None,
+    )
+    return sol
+
+def compute_rhs_and_grad(t_eval: np.ndarray, y_traj: np.ndarray, S_traj: np.ndarray, p: dict):
+    n = y_traj.shape[1]
+    m = S_traj.shape[2]
+    rhs_vals = np.zeros_like(y_traj)
+    df_acc_pre = np.zeros((n, m), dtype=float)
+    df_acc_post = np.zeros((n, m), dtype=float)
+    pre_cnt = 0
+    post_cnt = 0
+    for idx, t in enumerate(t_eval):
+        y = y_traj[idx]
+        S = S_traj[idx]
+        f = rhs_wrapper(t, y, p)
+        rhs_vals[idx] = f
+        if t < T_ANTIGEN_START:
+            df = jacobian_actions(t, y, p, S)
+            df_acc_pre += df
+            pre_cnt += 1
+        if t >= T_STEADY:
+            df = jacobian_actions(t, y, p, S)
+            df_acc_post += df
+            post_cnt += 1
+    pre_vec = rhs_vals[t_eval < T_ANTIGEN_START].mean(axis=0) if pre_cnt > 0 else None
+    post_vec = rhs_vals[t_eval >= T_STEADY].mean(axis=0) if post_cnt > 0 else None
+    pre_df_mean = df_acc_pre / pre_cnt if pre_cnt > 0 else None
+    post_df_mean = df_acc_post / post_cnt if post_cnt > 0 else None
+    return pre_vec, post_vec, pre_df_mean, post_df_mean
+
+
+def loss_no_grad(theta: np.ndarray, t_steps: int = T_EVAL_COARSE):
+    """快速无梯度损失，用于全局随机筛选。"""
+    t_eval = np.linspace(0.0, T_END, t_steps)
+    p = apply_params(theta)
+    sol = solve_state_only(y0, p, t_eval)
+    if sol is None or not sol.success:
         return 1e12
-
-    # 部分 torchdiffeq 解算器可能返回较少的时间点（例如 scipy_solver）
-    # 这里对齐时间网格，避免掩码与轨迹长度不一致导致的索引错误
-    if sol_t.shape[0] != t_eval_t.shape[0]:
-        min_steps = min(sol_t.shape[0], t_eval_t.shape[0])
-        sol_t = sol_t[:min_steps]
-        t_eval_t = t_eval_t[:min_steps]
-
-    if torch.isnan(sol_t).any() or torch.isinf(sol_t).any():
+    y_traj = sol.y.T
+    if np.isnan(y_traj).any() or np.isinf(y_traj).any():
         return 1e12
-
-    # 批量计算RHS；避免 functorch 在时间分支上的数据依赖报错
-    rhs_list = []
-    for tt, yy in zip(t_eval_t, sol_t):
-        rhs_list.append(rhs_torch(tt, yy, p_t))
-    rhs_stack = torch.stack(rhs_list, dim=0)
-
-    pre_mask = t_eval_t < T_ANTIGEN_START
-    post_mask = t_eval_t > T_STEADY
-    if not bool(pre_mask.any()) or not bool(post_mask.any()):
+    if np.max(np.abs(y_traj)) > 1e8:
         return 1e12
-
-    pre_vec = rhs_stack[pre_mask].mean(dim=0)
-    post_vec = rhs_stack[post_mask].mean(dim=0)
-
-    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC_T
-    post_scaled = post_vec / RESIDUAL_SCALE_VEC_T
-    loss_t = torch.sum(pre_scaled ** 2) + torch.sum(post_scaled ** 2)
-    loss = float(loss_t.cpu().item())
-
-    LAST_EVAL["x"] = np.array(x_np, copy=True)
-    LAST_EVAL["val"] = loss
-    LAST_EVAL["pre"] = pre_vec.cpu().numpy()
-    LAST_EVAL["post"] = post_vec.cpu().numpy()
-    LAST_EVAL["traj"] = sol_t.cpu().numpy()
-    LAST_EVAL["t_eval"] = t_eval_t.cpu().numpy()
-
-    if verbose:
-        pre_norm = float(pre_vec.norm().cpu().item())
-        post_norm = float(post_vec.norm().cpu().item())
-        print(f"Loss={loss:.2e}, pre_norm={pre_norm:.2e}, post_norm={post_norm:.2e}")
-
-    return loss
+    rhs_vals = np.zeros_like(y_traj)
+    for idx, t in enumerate(t_eval):
+        rhs_vals[idx] = rhs_wrapper(t, y_traj[idx], p)
+    pre_mask = t_eval < T_ANTIGEN_START
+    post_mask = t_eval >= T_STEADY
+    if not pre_mask.any() or not post_mask.any():
+        return 1e12
+    pre_vec = rhs_vals[pre_mask].mean(axis=0)
+    post_vec = rhs_vals[post_mask].mean(axis=0)
+    if np.linalg.norm(pre_vec) > 1e6 or np.linalg.norm(post_vec) > 1e6:
+        return 1e12
+    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC
+    post_scaled = post_vec / RESIDUAL_SCALE_VEC
+    return float(np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2))
 
 # ============================================================================
-# STEP 4: Stage A 优化（窗口平均RHS），使用 nevergrad；如缺失则退回 differential_evolution
+# STEP 3: 损失与梯度
+# ============================================================================
+
+def loss_and_grad(theta: np.ndarray):
+    t_eval = np.linspace(0.0, T_END, T_EVAL_STEPS)
+    sol = solve_with_sens(theta, t_eval)
+    if not sol.success:
+        return 1e12, np.zeros_like(theta)
+
+    n = len(y0)
+    m = len(p_names)
+    y_traj = sol.y[:n, :].T
+    S_traj = sol.y[n:, :].T.reshape(len(t_eval), n, m)
+
+    if np.isnan(y_traj).any() or np.isinf(y_traj).any():
+        return 1e12, np.zeros_like(theta)
+
+    p = apply_params(theta)
+    pre_vec, post_vec, pre_df, post_df = compute_rhs_and_grad(t_eval, y_traj, S_traj, p)
+    if pre_vec is None or post_vec is None:
+        return 1e12, np.zeros_like(theta)
+
+    if np.linalg.norm(pre_vec) > 1e6 or np.linalg.norm(post_vec) > 1e6:
+        return 1e12, np.zeros_like(theta)
+
+    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC
+    post_scaled = post_vec / RESIDUAL_SCALE_VEC
+    loss = float(np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2))
+
+    grad = np.zeros_like(theta)
+    for j in range(len(theta)):
+        pre_term = 0.0
+        post_term = 0.0
+        if pre_df is not None:
+            pre_term = np.sum(2.0 * pre_scaled * (pre_df[:, j] / RESIDUAL_SCALE_VEC))
+        if post_df is not None:
+            post_term = np.sum(2.0 * post_scaled * (post_df[:, j] / RESIDUAL_SCALE_VEC))
+        grad[j] = pre_term + post_term
+
+    return loss, grad
+
+# ============================================================================
+# STEP 4: 先快速全局随机筛选，再 L-BFGS-B 精修
 # ============================================================================
 print("\n" + "="*70)
-print("Stage A: nevergrad 全局搜索 (窗口平均RHS，torch积分)")
+print("Stage A: 随机起点快速筛选 (无梯度，BDF 状态积分)")
 print("="*70)
 
-lower_bounds = np.array([b[0] for b in theta_bounds], dtype=float)
-upper_bounds = np.array([b[1] for b in theta_bounds], dtype=float)
+GLOBAL_SAMPLES = 400
+TOP_K = 3
+best_list = []  # list of (loss, theta)
+rng = np.random.default_rng(42)
 
-best_x = x0.copy()
-best_loss = loss_fn(best_x, verbose=False)
+def push_candidate(loss_val: float, theta_vec: np.ndarray):
+    if not np.isfinite(loss_val):
+        return
+    best_list.append((loss_val, theta_vec.copy()))
+    best_list.sort(key=lambda x: x[0])
+    if len(best_list) > TOP_K:
+        best_list.pop(-1)
 
-if NG_AVAILABLE:
-    parametrization = ng.p.Array(init=best_x).set_bounds(lower=lower_bounds, upper=upper_bounds)
-    budget = 600  # 略减预算以加速
-    optimizer = ng.optimizers.OnePlusOne(parametrization=parametrization, budget=budget, num_workers=1)
-    rec = optimizer.minimize(loss_fn)
-    best_x = np.array(rec.value, dtype=float)
-    best_loss = loss_fn(best_x)
-else:
-    print("nevergrad 不可用，改用 scipy differential_evolution")
-    result = differential_evolution(
-        func=lambda v: loss_fn(v),
+# 先评估默认 x0
+base_loss = loss_no_grad(x0)
+push_candidate(base_loss, x0)
+
+for k in range(GLOBAL_SAMPLES):
+    theta_rand = np.array([
+        rng.uniform(low=lb, high=ub) for (lb, ub) in theta_bounds
+    ], dtype=float)
+    l = loss_no_grad(theta_rand)
+    push_candidate(l, theta_rand)
+    if best_list[0][0] < RESIDUAL_TOL:
+        break
+
+print(f"随机筛选完成，TOP{TOP_K} 最佳无梯度损失: {[f'{v[0]:.3e}' for v in best_list]}")
+
+print("\n" + "="*70)
+print("Stage B: L-BFGS-B 精修（带敏感度梯度）")
+print("="*70)
+
+best_opt = None  # (loss, result, theta)
+for idx, (seed_loss, seed_theta) in enumerate(best_list, 1):
+    print(f"  精修起点 #{idx}: seed_loss={seed_loss:.3e}")
+    res = minimize(
+        fun=lambda v: loss_and_grad(v)[0],
+        x0=seed_theta,
+        method="L-BFGS-B",
+        jac=lambda v: loss_and_grad(v)[1],
         bounds=theta_bounds,
-        maxiter=200,
-        popsize=10,
-        polish=False,
-        updating="deferred",
-        workers=1,
-        tol=0.03,
+        options={"maxiter": 200, "ftol": 1e-9, "gtol": 1e-6},
     )
-    best_x = np.array(result.x, dtype=float)
-    best_loss = result.fun
+    final_loss = res.fun if res.success else np.inf
+    if best_opt is None or final_loss < best_opt[0]:
+        best_opt = (final_loss, res, seed_theta)
 
-# 快速局部精修（无梯度，RHS端点损失很廉价）
-polish = minimize(
-    fun=lambda v: loss_fn(v),
-    x0=best_x,
-    method="L-BFGS-B",
-    bounds=theta_bounds,
-    options={"maxiter": 120, "ftol": 1.5e-10}
+opt_result = best_opt[1]
+x_opt = opt_result.x if opt_result.success else best_opt[2]
+p_opt = apply_params(x_opt)
+
+print(f"优化成功: {opt_result.success}, 迭代: {opt_result.nit}, 函数调用: {opt_result.nfev}")
+print(f"最终损失: {opt_result.fun if opt_result.success else np.nan:.4e}")
+
+# ============================================================================
+# STEP 5: 验证与输出
+# ============================================================================
+
+t_eval = np.linspace(0.0, T_END, 601)
+sol_final = solve_with_sens(x_opt, t_eval)
+y_final_traj = sol_final.y[:len(y0), :].T
+p_final = apply_params(x_opt)
+pre_vec_opt, post_vec_opt, _, _ = compute_rhs_and_grad(
+    t_eval,
+    y_final_traj,
+    sol_final.y[len(y0):, :].T.reshape(len(t_eval), len(y0), len(p_names)),
+    p_final,
 )
-if polish.success and polish.fun < best_loss:
-    best_x = np.array(polish.x, dtype=float)
-    best_loss = float(polish.fun)
+pre_res_opt = np.linalg.norm(pre_vec_opt) if pre_vec_opt is not None else float("inf")
+post_res_opt = np.linalg.norm(post_vec_opt) if post_vec_opt is not None else float("inf")
 
-p_opt = apply_params(best_x)
-LAST_EVAL_PRE = LAST_EVAL.get("pre")
-LAST_EVAL_POST = LAST_EVAL.get("post")
-sol_opt = None  # Stage A 不强制积分
-
-# ============================================================================
-# STEP 5: 验证并保存（可选轨迹求解）
-# ============================================================================
-
-DO_TRAJ_CHECK = True  # 打开轨迹复核与绘图
-
-if DO_TRAJ_CHECK:
-    t_eval = np.linspace(0, T_END, T_EVAL_STEPS)  # 与 Stage A 一致的粗网格
-    sol_opt = solve(y0, p_opt, t_eval)
-    y_final = sol_opt[t_eval >= T_STEADY].mean(axis=0)
-    pre_vec_opt, post_vec_opt = compute_residual_vectors(t_eval, sol_opt, p_opt)
-    pre_res_opt = np.linalg.norm(pre_vec_opt) if pre_vec_opt is not None else float("inf")
-    post_res_opt = np.linalg.norm(post_vec_opt) if post_vec_opt is not None else float("inf")
-else:
-    y_final = target_y.copy()
-    pre_res_opt = np.linalg.norm(LAST_EVAL_PRE) if LAST_EVAL_PRE is not None else float("inf")
-    post_res_opt = np.linalg.norm(LAST_EVAL_POST) if LAST_EVAL_POST is not None else float("inf")
-    t_eval = None
+y_final_avg = y_final_traj[t_eval >= T_STEADY].mean(axis=0)
 
 print("\n" + "="*70)
 print("优化结果验证")
@@ -359,17 +407,16 @@ key_vars = ['IgG4', 'act_CD4', 'TD Plasma', 'TI Plasma', 'Th2', 'IL_4', 'IL_10']
 for v in key_vars:
     i = IDX[v]
     target = target_y[i]
-    actual = y_final[i]
+    actual = y_final_avg[i]
     if target > 0:
         dev = abs(actual - target) / target * 100
     else:
         dev = 0 if actual < 1 else float('inf')
     print(f"{v:<15} {target:<12.2e} {actual:<12.2e} {dev:<10.1f}")
 
-print(f"前段残差范数: {pre_res_opt:.4e}")  # 输出刺激前残差范数
-print(f"后段残差范数: {post_res_opt:.4e}")  # 输出稳态后残差范数
-print(f"Stage A 端点损失: {best_loss:.4e}")
-
+print(f"前段残差范数: {pre_res_opt:.4e}")
+print(f"后段残差范数: {post_res_opt:.4e}")
+print(f"最终损失: {opt_result.fun if opt_result.success else np.nan:.4e}")
 
 # ============================================================================
 # STEP 6: 保存优化参数到 utils.py
@@ -384,13 +431,13 @@ with open('utils.py', 'r', encoding='utf-8') as f:
 for signature in ('def param_optimized():', 'def param_optimized_candidates():'):
     if signature in content:
         start = content.find(signature)
-        end = content.find('\ndef ', start + 1)
+        end = content.find('\n\ndef ', start + 1)
         if end == -1:
             end = len(content)
         content = content[:start] + content[end:]
 
 lines = ["\ndef param_optimized_candidates():",
-         '    """返回Stage A找到的候选参数列表"""',
+         '    """返回BDF+敏感度优化得到的候选参数列表"""',
          "    candidates = []",
          "    params = {}"]
 
@@ -409,9 +456,11 @@ print("已保存 param_optimized_candidates() 到 utils.py")
 # ============================================================================
 # STEP 7: 绘图（可选）
 # ============================================================================
-if DO_TRAJ_CHECK and sol_opt is not None and t_eval is not None:
+DO_PLOT = True
+if DO_PLOT and sol_final.success:
     print("\n绘制轨迹图...")
-    sol_init = solve(y0, p_init, t_eval)
+    sol_init = solve_ivp(lambda t, y: rhs_wrapper(t, y, p_init), (0.0, T_END), y0,
+                         method="BDF", t_eval=t_eval, rtol=1e-5, atol=1e-8)
 
     fig, axes = plt.subplots(6, 5, figsize=(16, 14))
     axes = axes.flatten()
@@ -422,13 +471,11 @@ if DO_TRAJ_CHECK and sol_opt is not None and t_eval is not None:
             break
         ax = axes[idx]
         i = IDX[var]
-        
-        ax.plot(t_eval, sol_init[:, i], 'b-', alpha=0.5, label='Initial')
-        ax.plot(t_eval, sol_opt[:, i], 'g-', linewidth=1.5, label='Optimized')
+        ax.plot(t_eval, sol_init.y[i], 'b-', alpha=0.5, label='Initial')
+        ax.plot(t_eval, sol_final.y[i], 'g-', linewidth=1.5, label='Optimized')
         ax.axhline(target_y[i], color='r', linestyle='--', alpha=0.7, label='Target')
         ax.axvline(T_ANTIGEN_START, color='gray', linestyle=':', alpha=0.5)
         ax.axvline(T_ANTIGEN_END, color='gray', linestyle=':', alpha=0.5)
-        
         ax.set_title(var, fontsize=9)
         ax.set_xlabel('Time', fontsize=7)
         ax.tick_params(labelsize=7)
