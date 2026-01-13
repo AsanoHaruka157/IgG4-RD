@@ -1,0 +1,28 @@
+Collecting package metadata (current_repodata.json): ...working... done
+Solving environment: ...working... done
+
+## Package Plan ##
+
+  environment location: C:\Users\21138\anaconda3
+
+  added / updated specs:
+    - numpy
+    - scipy
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    scipy-1.9.3                |  py311hc1ccb85_2        19.8 MB  https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+    ------------------------------------------------------------
+                                           Total:        19.8 MB
+
+The following packages will be SUPERSEDED by a higher-priority channel:
+
+  scipy              pkgs/main::scipy-1.12.0-py311h9f229c6~ --> anaconda/pkgs/main::scipy-1.9.3-py311hc1ccb85_2 
+
+
+Proceed ([y]/n)? Invalid choice: & c:/users/21138/anaconda3/python.exe c:/users/21138/desktop/快速访问/igg4-rd/optimize_jax.py
+Proceed ([y]/n)? Invalid choice: & c:/users/21138/anaconda3/python.exe c:/users/21138/desktop/快速访问/igg4-rd/optimize_jax.py
+Proceed ([y]/n)? 
