@@ -189,7 +189,7 @@ def jacobian_actions(t: float, y: np.ndarray, p: dict, S: np.ndarray) -> np.ndar
         p_minus[name] = base - delta
         f_p = rhs_wrapper(t, y, p_plus)
         f_m = rhs_wrapper(t, y, p_minus)
-        Jp_col = (f_p - f_m) / (2.0 * EPS_THETA)
+        Jp_col = (f_p - f_m) / (2.0 * delta)
 
         out[:, j] = Jy_v + Jp_col
     return out
@@ -317,40 +317,86 @@ def loss_and_grad(theta: np.ndarray):
 
     return loss, grad
 
+
+def loss_and_grad_steps(theta: np.ndarray, t_steps: int = T_EVAL_STEPS):
+    """与 loss_and_grad 相同，但可指定时间步数用于梯度检查。"""
+    t_eval = np.linspace(0.0, T_END, t_steps)
+    sol = solve_with_sens(theta, t_eval)
+    if not sol.success:
+        return 1e12, np.zeros_like(theta)
+
+    n = len(y0)
+    m = len(p_names)
+    y_traj = sol.y[:n, :].T
+    S_traj = sol.y[n:, :].T.reshape(len(t_eval), n, m)
+
+    if np.isnan(y_traj).any() or np.isinf(y_traj).any():
+        return 1e12, np.zeros_like(theta)
+
+    p = apply_params(theta)
+    pre_vec, post_vec, pre_df, post_df = compute_rhs_and_grad(t_eval, y_traj, S_traj, p)
+    if pre_vec is None or post_vec is None:
+        return 1e12, np.zeros_like(theta)
+
+    if np.linalg.norm(pre_vec) > 1e6 or np.linalg.norm(post_vec) > 1e6:
+        return 1e12, np.zeros_like(theta)
+
+    pre_scaled = pre_vec / RESIDUAL_SCALE_VEC
+    post_scaled = post_vec / RESIDUAL_SCALE_VEC
+    loss = float(np.sum(pre_scaled ** 2) + np.sum(post_scaled ** 2))
+
+    grad = np.zeros_like(theta)
+    for j in range(len(theta)):
+        pre_term = 0.0
+        post_term = 0.0
+        if pre_df is not None:
+            pre_term = np.sum(2.0 * pre_scaled * (pre_df[:, j] / RESIDUAL_SCALE_VEC))
+        if post_df is not None:
+            post_term = np.sum(2.0 * post_scaled * (post_df[:, j] / RESIDUAL_SCALE_VEC))
+        grad[j] = pre_term + post_term
+
+    return loss, grad
+
+
+def run_gradient_check():
+    """在小规模上做梯度检查（中心差分 vs. 敏感度梯度）。"""
+    CHECK_STEPS = 61
+    CHECK_EPS = 1e-4  # theta 空间扰动
+    select_idx = list(range(min(5, len(p_names))))
+    theta0 = x0.copy()
+    loss_a, grad_a = loss_and_grad_steps(theta0, t_steps=CHECK_STEPS)
+    print("\n[Gradient Check] loss=%.3e (steps=%d)" % (loss_a, CHECK_STEPS))
+    print(f"检查参数: {[p_names[i] for i in select_idx]}")
+    print(f"{'param':<18} {'grad(sens)':>14} {'grad(fd)':>14} {'rel_err':>10}")
+    for j in select_idx:
+        e = np.zeros_like(theta0)
+        e[j] = CHECK_EPS
+        lp, _ = loss_and_grad_steps(theta0 + e, t_steps=CHECK_STEPS)
+        lm, _ = loss_and_grad_steps(theta0 - e, t_steps=CHECK_STEPS)
+        g_fd = (lp - lm) / (2.0 * CHECK_EPS)
+        g_an = grad_a[j]
+        denom = max(1.0, abs(g_fd), abs(g_an))
+        rel_err = abs(g_fd - g_an) / denom
+        print(f"{p_names[j]:<18} {g_an:14.3e} {g_fd:14.3e} {rel_err:10.3e}")
+
+
 # ============================================================================
 # STEP 4: 先快速全局随机筛选，再 L-BFGS-B 精修
 # ============================================================================
 print("\n" + "="*70)
-print("Stage A: 随机起点快速筛选 (无梯度，BDF 状态积分)")
+print("Stage A: 梯度检查 (仅检查，不做随机筛选)")
 print("="*70)
 
-GLOBAL_SAMPLES = 400
-TOP_K = 3
-best_list = []  # list of (loss, theta)
-rng = np.random.default_rng(42)
-
-def push_candidate(loss_val: float, theta_vec: np.ndarray):
-    if not np.isfinite(loss_val):
-        return
-    best_list.append((loss_val, theta_vec.copy()))
-    best_list.sort(key=lambda x: x[0])
-    if len(best_list) > TOP_K:
-        best_list.pop(-1)
-
-# 先评估默认 x0
-base_loss = loss_no_grad(x0)
-push_candidate(base_loss, x0)
-
-for k in range(GLOBAL_SAMPLES):
-    theta_rand = np.array([
-        rng.uniform(low=lb, high=ub) for (lb, ub) in theta_bounds
-    ], dtype=float)
-    l = loss_no_grad(theta_rand)
-    push_candidate(l, theta_rand)
-    if best_list[0][0] < RESIDUAL_TOL:
-        break
-
-print(f"随机筛选完成，TOP{TOP_K} 最佳无梯度损失: {[f'{v[0]:.3e}' for v in best_list]}")
+# 仅做梯度检查；不进入随机筛选或优化。
+DO_GRAD_CHECK = True
+if DO_GRAD_CHECK:
+    run_gradient_check()
+    # 另外在一个“数值不大的”起点上再算一次损失与梯度（取每个参数对数区间中点）。
+    theta_mid = np.array([(lb + ub) * 0.5 for (lb, ub) in theta_bounds], dtype=float)
+    loss_mid, grad_mid = loss_and_grad_steps(theta_mid, t_steps=61)
+    print("\n[Midpoint Grad] loss=%.3e, grad_norm=%.3e" % (loss_mid, np.linalg.norm(grad_mid)))
+    import sys
+    sys.exit(0)
 
 print("\n" + "="*70)
 print("Stage B: L-BFGS-B 精修（带敏感度梯度）")
