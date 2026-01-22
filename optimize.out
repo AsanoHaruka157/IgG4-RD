@@ -1,0 +1,209 @@
+nohup: ignoring input
+qt.qpa.xcb: could not connect to display localhost:10.0
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: xcb, minimal, vkkhrdisplay, minimalegl, offscreen, eglfs, linuxfb, vnc.
+
+Aborted (core dumped)
+connect: Connection refused
+GKS: the graphics window could not be opened because no connection to the GKS Qt driver could be established. Please check all Qt warnings to determine whether (or why) 'gksqt' could not be started.
+
+GKS: Open failed in routine OPEN_WS
+GKS: GKS not in proper state. GKS must be either in the state WSOP or WSAC in routine ACTIVATE_WS
+┌ Warning: To maintain consistency with solution indexing, keyword argument vars will be removed in a future version. Please use keyword argument idxs instead.
+│   caller = ip:0x0
+└ @ Core :-1
+数据加载完成: 22 个时间点, 30 个变量
+模型变量列表: ["nDC", "mDC", "pDC", "naive_CD4", "act_CD4", "Th2", "iTreg", "CD4_CTL", "nTreg", "TFH", "NK", "act_NK", "Naive_B", "Act_B", "TD_IS_B", "TI_IS_B", "GMCSF", "IL_33", "IL_6", "IL_12", "IL_15", "IL_7", "IFN1", "IL_1", "IL_2", "IL_4", "IL_10", "TGFbeta", "IFN_g", "IgG4"]
+
+参数初始化完成 (用于派生一阶段/二阶段边界):
+  - 参数总数: 165
+  - 初值线性空间范围: [0.0008778525243441402, 1.008981893536978e6]
+  - 一阶段采样范围: ±50.0%
+  - 二阶段优化范围: x0.01 ~ x100.0
+
+Smooth 基准值初始化: SMOOTH_0=6.2143118990522675e10
+
+======================================================================
+阶段 1: 高通量采样筛选 (High-Throughput Sampling Screening)
+======================================================================
+正在生成 1000 组拉丁超立方采样点...
+开始并行计算 1000 组参数的初始 Loss...
+（此阶段不做优化，仅筛选 '潜力股'）
+筛选进度: 10.0%  (i=100/1000)
+筛选进度: 20.0%  (i=200/1000)
+筛选进度: 30.0%  (i=300/1000)
+筛选进度: 40.0%  (i=400/1000)
+筛选进度: 50.0%  (i=500/1000)
+筛选进度: 60.0%  (i=600/1000)
+筛选进度: 70.0%  (i=700/1000)
+筛选进度: 80.0%  (i=800/1000)
+筛选进度: 90.0%  (i=900/1000)
+筛选进度: 100.0%  (i=1000/1000)
+
+采样完成！有效样本数: 1000 / 1000
+
+Top 15 候选参数 (total = (smooth_norm + 0.001) * data_loss):
+  #1: total=2326.2596279305735  data=5884.15855892765  smooth_raw=2.4505690567613304e10  smooth_norm=0.3943427842968459
+  #2: total=2425.087836136797  data=5727.385080743235  smooth_raw=2.6250479454654213e10  smooth_norm=0.422419728540777
+  #3: total=2662.3321648427163  data=5717.114813407427  smooth_raw=2.887651386304637e10  smooth_norm=0.4646775754440296
+  #4: total=2801.251244263901  data=5695.563098781159  smooth_raw=3.050173377527066e10  smooth_norm=0.49083042935006094
+  #5: total=2867.8331364265146  data=5681.601961240851  smooth_raw=3.1305083423397808e10  smooth_norm=0.5037578404806424
+  #6: total=2973.2724271509073  data=5632.733698505913  smooth_raw=3.2740476731596756e10  smooth_norm=0.5268560262736316
+  #7: total=3099.4824524769533  data=5760.509816622378  smooth_raw=3.3374395136273037e10  smooth_norm=0.5370569691129016
+  #8: total=3227.481343507597  data=5562.754396459772  smooth_raw=3.599297326309012e10  smooth_norm=0.5791948303814418
+  #9: total=3227.9096693842866  data=5790.324417317918  smooth_raw=3.458054012605711e10  smooth_norm=0.5564661170503908
+  #10: total=3261.2375893506105  data=5651.090563344702  smooth_raw=3.580057635075966e10  smooth_norm=0.5760988011596097
+  #11: total=3347.312571405824  data=5722.827772721173  smooth_raw=3.6285699535802345e10  smooth_norm=0.5839053482548184
+  #12: total=3350.694068993902  data=5748.3950859083  smooth_raw=3.616058985577836e10  smooth_norm=0.5818920975191567
+  #13: total=3390.7509126369537  data=5547.564265615192  smooth_raw=3.792062325241595e10  smooth_norm=0.6102143546769601
+  #14: total=3396.9660765754343  data=5656.203250333507  smooth_raw=3.7259370582086716e10  smooth_norm=0.5995735519449622
+  #15: total=3409.2205576731553  data=5728.17921302816  smooth_raw=3.692336150673231e10  smooth_norm=0.5941665321362904
+
+======================================================================
+阶段 2: 深度精修 (Full L-BFGS Optimization)
+======================================================================
+
+优化第 1/15 组参数...
+  初始 total: 2326.2596279305735
+    data=5884.15855892765  smooth_raw=2.4505690567613304e10  smooth_norm=0.3943427842968459
+  优化后 total: 85.05100191114305
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2241.2086260194305
+二阶段进度: 6.7%  (idx=1/15)
+
+优化第 2/15 组参数...
+  初始 total: 2425.087836136797
+    data=5727.385080743235  smooth_raw=2.6250479454654213e10  smooth_norm=0.422419728540777
+  优化后 total: 4.876883848419551
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2420.210952288377
+二阶段进度: 13.3%  (idx=2/15)
+
+优化第 3/15 组参数...
+  初始 total: 2662.3321648427163
+    data=5717.114813407427  smooth_raw=2.887651386304637e10  smooth_norm=0.4646775754440296
+  优化后 total: 87.45418106290852
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2574.877983779808
+二阶段进度: 20.0%  (idx=3/15)
+
+优化第 4/15 组参数...
+  初始 total: 2801.251244263901
+    data=5695.563098781159  smooth_raw=3.050173377527066e10  smooth_norm=0.49083042935006094
+  优化后 total: 4.305137110784142
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2796.946107153117
+二阶段进度: 26.7%  (idx=4/15)
+
+优化第 5/15 组参数...
+  初始 total: 2867.8331364265146
+    data=5681.601961240851  smooth_raw=3.1305083423397808e10  smooth_norm=0.5037578404806424
+  优化后 total: 4.364098693406167
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2863.4690377331085
+二阶段进度: 33.3%  (idx=5/15)
+
+优化第 6/15 组参数...
+  初始 total: 2973.2724271509073
+    data=5632.733698505913  smooth_raw=3.2740476731596756e10  smooth_norm=0.5268560262736316
+  优化后 total: 4.364384296909754
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 2968.9080428539974
+二阶段进度: 40.0%  (idx=6/15)
+
+优化第 7/15 组参数...
+  初始 total: 3099.4824524769533
+    data=5760.509816622378  smooth_raw=3.3374395136273037e10  smooth_norm=0.5370569691129016
+  优化后 total: 4.349474799637926
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3095.1329776773155
+二阶段进度: 46.7%  (idx=7/15)
+
+优化第 8/15 组参数...
+  初始 total: 3227.481343507597
+    data=5562.754396459772  smooth_raw=3.599297326309012e10  smooth_norm=0.5791948303814418
+  优化后 total: 69.692651528893
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3157.7886919787043
+二阶段进度: 53.3%  (idx=8/15)
+
+优化第 9/15 组参数...
+  初始 total: 3227.9096693842866
+    data=5790.324417317918  smooth_raw=3.458054012605711e10  smooth_norm=0.5564661170503908
+  优化后 total: 4.308203349775896
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3223.601466034511
+二阶段进度: 60.0%  (idx=9/15)
+
+优化第 10/15 组参数...
+  初始 total: 3261.2375893506105
+    data=5651.090563344702  smooth_raw=3.580057635075966e10  smooth_norm=0.5760988011596097
+  优化后 total: 4.345512198882906
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3256.892077151728
+二阶段进度: 66.7%  (idx=10/15)
+
+优化第 11/15 组参数...
+  初始 total: 3347.312571405824
+    data=5722.827772721173  smooth_raw=3.6285699535802345e10  smooth_norm=0.5839053482548184
+  优化后 total: 4.363628400245722
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3342.9489430055783
+二阶段进度: 73.3%  (idx=11/15)
+
+优化第 12/15 组参数...
+  初始 total: 3350.694068993902
+    data=5748.3950859083  smooth_raw=3.616058985577836e10  smooth_norm=0.5818920975191567
+  优化后 total: 85.84985869721123
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3264.8442102966906
+二阶段进度: 80.0%  (idx=12/15)
+
+优化第 13/15 组参数...
+  初始 total: 3390.7509126369537
+    data=5547.564265615192  smooth_raw=3.792062325241595e10  smooth_norm=0.6102143546769601
+  优化后 total: 69.81642204570069
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3320.934490591253
+二阶段进度: 86.7%  (idx=13/15)
+
+优化第 14/15 组参数...
+  初始 total: 3396.9660765754343
+    data=5656.203250333507  smooth_raw=3.7259370582086716e10  smooth_norm=0.5995735519449622
+  优化后 total: 4.364607607193735
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3392.6014689682406
+二阶段进度: 93.3%  (idx=14/15)
+
+优化第 15/15 组参数...
+  初始 total: 3409.2205576731553
+    data=5728.17921302816  smooth_raw=3.692336150673231e10  smooth_norm=0.5941665321362904
+  优化后 total: 85.71025164171114
+    data=NaN  smooth_raw=NaN  smooth_norm=NaN  (warning: final solve failed: Success)
+  改进: 3323.510306031444
+二阶段进度: 100.0%  (idx=15/15)
+
+======================================================================
+优化完成！
+======================================================================
+最佳结果来自第 4 组:
+  最终 Loss: 4.305137110784142
+  参数范围（线性空间）: [9.21071407618945e-5, 4.101000657530778e7]
+
+保存二阶段优化结果到文件...
+已保存: loss_curve.tsv
+已保存: loss_curve.png
+已保存: stage2_optimized_params.tsv (全部精修结果)
+已保存: best_params.tsv (最佳结果)
+
+======================================================================
+生成二阶段精修参数集预测的轨线图
+======================================================================
+已保存完整结果图: optimization_result.png
+
+======================================================================
+所有任务完成！
+======================================================================
