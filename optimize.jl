@@ -721,7 +721,7 @@ global current_opt_maxiters = FINE_MAXITERS
 # 辅助函数：计算稳态损失
 function compute_steady_state_loss(prob, sol)
     """
-    计算稳态损失：log(||rhs(t=0)||+1.1) * log(||rhs(t=250)||+1.1)
+    计算稳态损失：log(||rhs(t=0)||+10) * log(||rhs(t=250)||+10)
     返回：(乘积, t=0的值, t=250的值)
     """
     try
@@ -732,14 +732,14 @@ function compute_steady_state_loss(prob, sol)
         du0 = similar(u0_vec)
         rhs_func(du0, u0_vec, prob.p, 0.0)
         rhs_norm_t0 = sqrt(sum(abs2, du0))
-        steady_loss_t0 = log(rhs_norm_t0 + 1.1)
+        steady_loss_t0 = log(rhs_norm_t0 + 10.0)
         
         # 计算 t=250 时刻的 RHS（使用解在 t=250 的值）
         u_t250 = sol(250.0)
         du_t250 = similar(u_t250)
         rhs_func(du_t250, u_t250, prob.p, 250.0)
         rhs_norm_t250 = sqrt(sum(abs2, du_t250))
-        steady_loss_t250 = log(rhs_norm_t250 + 1.1)
+        steady_loss_t250 = log(rhs_norm_t250 + 10.0)
         
         # 返回三个值：乘积、t=0的值、t=250的值
         return (steady_loss_t0 * steady_loss_t250, steady_loss_t0, steady_loss_t250)
@@ -1027,7 +1027,7 @@ for (idx, cand) in enumerate(top_candidates)
         init_sol = solve(init_prob, QNDF(), saveat=target_time, abstol=ODE_ABSTOL, reltol=ODE_RELTOL, verbose=false, maxiters=ODE_MAXITERS)
         if init_sol.retcode == :Success || string(init_sol.retcode) == "Success"
             _, init_rhs0, init_rhs250 = compute_steady_state_loss(init_prob, init_sol)
-            println("    RHS稳态控制: log(||RHS0||+1.1)=$(init_rhs0)  log(||RHS250||+1.1)=$(init_rhs250)")
+            println("    RHS稳态控制: log(||RHS0||+10)=$(init_rhs0)  log(||RHS250||+10)=$(init_rhs250)")
         end
     catch
         # 忽略错误
@@ -1153,7 +1153,7 @@ for (idx, cand) in enumerate(top_candidates)
             println("  优化后 total: $(final_total)")
             println("    data=$(final_data_loss)  smooth_raw=$(final_smooth_raw)  smooth_norm=$(final_smooth_norm)  (warning: computed values invalid, using optimizer objective)")
             if isfinite(final_rhs0) && isfinite(final_rhs250)
-                println("    RHS稳态控制: log(||RHS0||+1.1)=$(final_rhs0)  log(||RHS250||+1.1)=$(final_rhs250)")
+                println("    RHS稳态控制: log(||RHS0||+10)=$(final_rhs0)  log(||RHS250||+10)=$(final_rhs250)")
             end
         else
             sp = smoothness_penalty(s, collect(keys(target_data)))
@@ -1163,7 +1163,7 @@ for (idx, cand) in enumerate(top_candidates)
                 println("  优化后 total: $(final_total)")
                 println("    data=$(dl)  smooth_raw=NaN  smooth_norm=NaN  (warning: smoothness_penalty returned NaN/Inf)")
                 if isfinite(final_rhs0) && isfinite(final_rhs250)
-                    println("    RHS稳态控制: log(||RHS0||+1.1)=$(final_rhs0)  log(||RHS250||+1.1)=$(final_rhs250)")
+                    println("    RHS稳态控制: log(||RHS0||+10)=$(final_rhs0)  log(||RHS250||+10)=$(final_rhs250)")
                 end
             else
                 sn = log(max(sp, SMOOTH_EPS))
@@ -1173,7 +1173,7 @@ for (idx, cand) in enumerate(top_candidates)
                     println("  优化后 total: $(final_total)")
                     println("    data=$(dl)  smooth_raw=$(sp)  smooth_norm=NaN  (warning: smooth_norm is NaN/Inf)")
                     if isfinite(final_rhs0) && isfinite(final_rhs250)
-                        println("    RHS稳态控制: log(||RHS0||+1.1)=$(final_rhs0)  log(||RHS250||+1.1)=$(final_rhs250)")
+                        println("    RHS稳态控制: log(||RHS0||+10)=$(final_rhs0)  log(||RHS250||+10)=$(final_rhs250)")
                     end
                 else
                     recomputed_total = (sn + SMOOTH_EPS) * dl
@@ -1183,7 +1183,7 @@ for (idx, cand) in enumerate(top_candidates)
                         println("  优化后 total: $(final_total)")
                         println("    data=$(dl)  smooth_raw=$(sp)  smooth_norm=$(sn)  (warning: recomputed_total is NaN/Inf, using optimizer objective)")
                         if isfinite(final_rhs0) && isfinite(final_rhs250)
-                            println("    RHS稳态控制: log(||RHS0||+1.1)=$(final_rhs0)  log(||RHS250||+1.1)=$(final_rhs250)")
+                            println("    RHS稳态控制: log(||RHS0||+10)=$(final_rhs0)  log(||RHS250||+10)=$(final_rhs250)")
                         end
                     else
                         final_data_loss = dl
@@ -1194,7 +1194,7 @@ for (idx, cand) in enumerate(top_candidates)
                         println("  优化后 total: $(final_total)")
                         println("    data=$(final_data_loss)  smooth_raw=$(final_smooth_raw)  smooth_norm=$(final_smooth_norm)")
                         if isfinite(final_rhs0) && isfinite(final_rhs250)
-                            println("    RHS稳态控制: log(||RHS0||+1.1)=$(final_rhs0)  log(||RHS250||+1.1)=$(final_rhs250)")
+                            println("    RHS稳态控制: log(||RHS0||+10)=$(final_rhs0)  log(||RHS250||+10)=$(final_rhs250)")
                         end
                     end
                 end

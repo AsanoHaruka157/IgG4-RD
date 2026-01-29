@@ -1,0 +1,146 @@
+参数类型	参数名	对应原始参数
+原有参数	k_Act_B_Antigen_f	-
+原有参数	k_Act_B_Antigen_pro_f	-
+原有参数	k_Act_B_basal_f	-
+原有参数	k_Act_B_d	-
+原有参数	k_Act_B_f	-
+原有参数	k_CD4_CTL_d	-
+原有参数	k_CD4_CTL_f	-
+原有参数	k_CD4_f	-
+原有参数	k_GMCSF_Th2_Antigen_f	-
+原有参数	k_GMCSF_Th2_f	-
+原有参数	k_GMCSF_act_NK_f	-
+原有参数	k_GMCSF_d	-
+原有参数	k_IFN1_d	-
+原有参数	k_IFN1_pDC_f	-
+原有参数	k_IFN_g_CD4_CTL_f	-
+原有参数	k_IFN_g_act_NK_f	-
+原有参数	k_IFN_g_d	-
+原有参数	k_IL_10_d	-
+原有参数	k_IL_10_iTreg_f	-
+原有参数	k_IL_12_d	-
+原有参数	k_IL_12_mDC_f	-
+原有参数	k_IL_15_Antigen_f	-
+原有参数	k_IL_15_d	-
+原有参数	k_IL_15_f	-
+原有参数	k_IL_1_d	-
+原有参数	k_IL_1_mDC_f	-
+原有参数	k_IL_2_act_CD4_Antigen_f	-
+原有参数	k_IL_2_act_CD4_f	-
+原有参数	k_IL_2_d	-
+原有参数	k_IL_33_d	-
+原有参数	k_IL_33_pDC_f	-
+原有参数	k_IL_4_Th2_Antigen_f	-
+原有参数	k_IL_4_Th2_f	-
+原有参数	k_IL_4_d	-
+原有参数	k_IL_6_d	-
+原有参数	k_IL_6_mDC_f	-
+原有参数	k_IL_6_pDC_f	-
+原有参数	k_IL_7_d	-
+原有参数	k_IL_7_f	-
+原有参数	k_IgG4_TD_f	-
+原有参数	k_IgG4_TI_f	-
+原有参数	k_IgG4_d	-
+原有参数	k_NK_d	-
+原有参数	k_NK_f	-
+原有参数	k_Naive_B_Antigen_f	-
+原有参数	k_Naive_B_d	-
+原有参数	k_Naive_B_f	-
+原有参数	k_TD_IL_4_f	-
+原有参数	k_TD_base_f	-
+原有参数	k_TD_d	-
+原有参数	k_TD_f	-
+原有参数	k_TFH_d	-
+原有参数	k_TFH_f	-
+原有参数	k_TFH_mDC_Antigen_f	-
+原有参数	k_TFH_mDC_f	-
+原有参数	k_TGFbeta_CD4_CTL_f	-
+原有参数	k_TGFbeta_d	-
+原有参数	k_TGFbeta_iTreg_f	-
+原有参数	k_TI_IFN_g_f	-
+原有参数	k_TI_IL_10_f	-
+原有参数	k_TI_base_f	-
+原有参数	k_TI_d	-
+原有参数	k_TI_f	-
+原有参数	k_Th2_d	-
+原有参数	k_Th2_f	-
+原有参数	k_act_CD4_CTL_antigen_f	-
+原有参数	k_act_CD4_CTL_basal_f	-
+原有参数	k_act_CD4_d	-
+原有参数	k_act_CD4_f	-
+原有参数	k_act_NK_base_f	-
+原有参数	k_act_NK_d	-
+原有参数	k_act_NK_f	-
+原有参数	k_iTreg_d	-
+原有参数	k_iTreg_f	-
+原有参数	k_mDC_d	-
+原有参数	k_mDC_f	-
+原有参数	k_nDC_d	-
+原有参数	k_nDC_f	-
+原有参数	k_nTreg_d	-
+原有参数	k_naive_CD4_d	-
+原有参数	k_pDC_Antigen_f	-
+原有参数	k_pDC_d	-
+原有参数	k_pDC_f	-
+新定义参数	k_Act_B_Antigen_pro_f_div_m	k_Act_B_Antigen_pro_f, k_Act_B_m
+新定义参数	k_Act_B_f_div_m	k_Act_B_f, k_Act_B_m
+新定义参数	k_CD4_CTL_f_div_m	k_CD4_CTL_f, k_CD4_CTL_m
+新定义参数	k_CD4_f_div_m	k_CD4_f, k_CD4_m
+新定义参数	k_IL_10_nTreg_eff	k_IL_10_nTreg_f, k_IL_10_nTreg_mDC_m
+新定义参数	k_IL_6_TFH_eff	k_IL_6_TFH_f, k_TFH_nTreg_m
+新定义参数	k_NK_f_div_m	k_NK_f, k_NK_m
+新定义参数	k_Naive_B_Antigen_f_div_m	k_Naive_B_Antigen_f, k_Naive_B_m
+新定义参数	k_Naive_B_f_div_m	k_Naive_B_f, k_Naive_B_m
+新定义参数	k_TD_f_div_m	k_TD_f, k_TD_m
+新定义参数	k_TFH_IFN1_f_eff	k_TFH_IFN1_f, k_TFH_IFN1_m
+新定义参数	k_TFH_IL_6_d_eff	k_TFH_IL_6_d, k_TFH_IL_6_m
+新定义参数	k_TFH_IL_6_f_eff	k_TFH_IL_6_f, k_TFH_IL_6_m
+新定义参数	k_TFH_f_div_m	k_TFH_f, k_TFH_m
+新定义参数	k_TGFbeta_nTreg_eff	k_TGFbeta_nTreg_f, k_TGFbeta_nTreg_mDC_m
+新定义参数	k_TI_f_div_m	k_TI_f, k_TI_m
+新定义参数	k_Th2_IL_33_eff	k_Th2_IL_33_f, k_Th2_IL_33_m, k_Th2_TGFbeta_m, k_Th2_IL_10_m, k_Th2_IL_12_m
+新定义参数	k_Th2_IL_4_eff	k_Th2_IL_4_f, k_Th2_IL_4_m, k_Th2_TGFbeta_m, k_Th2_IL_10_m, k_Th2_IL_12_m
+新定义参数	k_Th2_f_div_m	k_Th2_f, k_Th2_m
+新定义参数	k_Th2_f_eff	k_Th2_f, k_Th2_TGFbeta_m, k_Th2_IL_10_m, k_Th2_IL_12_m
+新定义参数	k_act_CD4_IFN1_d_eff	k_act_CD4_IFN1_d, k_IFN1_CD4_CTL_m
+新定义参数	k_act_CD4_IFN1_f_eff	k_act_CD4_IFN1_f, k_IFN1_CD4_CTL_m
+新定义参数	k_act_CD4_IL_15_d_eff	k_act_CD4_IL_15_d, k_act_CD4_IL_15_m
+新定义参数	k_act_CD4_IL_15_eff	k_act_CD4_IL_15_f, k_act_CD4_IL_15_m
+新定义参数	k_act_CD4_IL_15_eff_div_m	k_act_CD4_IL_15_f, k_act_CD4_IL_15_m, k_act_CD4_m
+新定义参数	k_act_CD4_IL_2_d_eff	k_act_CD4_IL_2_d, k_act_CD4_IL_2_m
+新定义参数	k_act_CD4_IL_2_f_eff	k_act_CD4_IL_2_f, k_act_CD4_IL_2_m
+新定义参数	k_act_CD4_IL_33_d_eff	k_act_CD4_IL_33_d, k_Th2_IL_33_m
+新定义参数	k_act_CD4_IL_4_d_eff	k_act_CD4_IL_4_d, k_Th2_IL_4_m
+新定义参数	k_act_CD4_IL_7_d_eff	k_act_CD4_IL_7_d, k_act_CD4_IL_7_m
+新定义参数	k_act_CD4_IL_7_eff	k_act_CD4_IL_7_f, k_act_CD4_IL_7_m
+新定义参数	k_act_CD4_IL_7_eff_div_m	k_act_CD4_IL_7_f, k_act_CD4_IL_7_m, k_act_CD4_m
+新定义参数	k_act_CD4_f_div_m	k_act_CD4_f, k_act_CD4_m
+新定义参数	k_act_CD4_mDC_f_eff	k_act_CD4_mDC_f, k_act_CD4_mDC_m
+新定义参数	k_act_NK_IFN1_d_eff	k_act_NK_IFN1_d, k_act_NK_IFN1_m
+新定义参数	k_act_NK_IFN1_f_eff	k_act_NK_IFN1_f, k_act_NK_IFN1_m
+新定义参数	k_act_NK_IFN_g_d_eff	k_act_NK_IFN_g_d, k_act_NK_IFN_g_m
+新定义参数	k_act_NK_IFN_g_f_eff	k_act_NK_IFN_g_f, k_act_NK_IFN_g_m
+新定义参数	k_act_NK_IL_12_d_eff	k_act_NK_IL_12_d, k_act_NK_IL_12_m
+新定义参数	k_act_NK_IL_12_f_eff	k_act_NK_IL_12_f, k_act_NK_IL_12_m
+新定义参数	k_act_NK_IL_2_d_eff	k_act_NK_IL_2_d, k_act_NK_IL_2_m
+新定义参数	k_act_NK_IL_2_f_eff	k_act_NK_IL_2_f, k_act_NK_IL_2_m
+新定义参数	k_act_NK_f_div_m	k_act_NK_f, k_act_NK_m
+新定义参数	k_iTreg_IL_10_eff	k_iTreg_mDC_f, k_iTreg_IL_10_f, k_iTreg_IL_10_m, k_iTreg_IL_1_m
+新定义参数	k_iTreg_TGFbeta_eff	k_iTreg_mDC_f, k_iTreg_TGFbeta_f, k_iTreg_TGFbeta_m, k_iTreg_IL_1_m
+新定义参数	k_iTreg_f_div_m	k_iTreg_f, k_iTreg_m
+新定义参数	k_iTreg_mDC_d_TGFbeta_eff	k_iTreg_mDC_d, k_iTreg_TGFbeta_m
+新定义参数	k_iTreg_mDC_d_eff	k_iTreg_mDC_d, k_iTreg_IL_10_m
+新定义参数	k_mDC_Antigen_IL10_eff	k_mDC_Antigen_f, k_mDC_IL_10_m
+新定义参数	k_mDC_GMCSF_IL10_eff	k_mDC_GMCSF_f, k_mDC_GMCSF_m, k_mDC_IL_10_m
+新定义参数	k_mDC_GMCSF_d_eff	k_mDC_GMCSF_d, k_mDC_GMCSF_m, k_mDC_IL_10_m
+新定义参数	k_mDC_f_div_m	k_mDC_f, k_mDC_m
+新定义参数	k_nDC_f_div_m	k_nDC_f, k_nDC_m
+新定义参数	k_nTreg_mDC_f_eff	k_nTreg_mDC_f, k_nTreg_mDC_m
+新定义参数	k_nTreg_mDC_f_eff_div_m	k_nTreg_mDC_f, k_nTreg_mDC_m, k_nTreg_m
+新定义参数	k_naive_CD4_IL_15_d_eff	k_naive_CD4_IL_15_d, k_naive_CD4_IL_15_m
+新定义参数	k_naive_CD4_IL_15_eff	k_naive_CD4_IL_15_f, k_naive_CD4_IL_15_m
+新定义参数	k_naive_CD4_IL_15_eff_div_m	k_naive_CD4_IL_15_f, k_naive_CD4_IL_15_m, k_CD4_m
+新定义参数	k_naive_CD4_IL_7_d_eff	k_naive_CD4_IL_7_d, k_naive_CD4_IL_7_m
+新定义参数	k_naive_CD4_IL_7_eff	k_naive_CD4_IL_7_f, k_naive_CD4_IL_7_m
+新定义参数	k_naive_CD4_IL_7_eff_div_m	k_naive_CD4_IL_7_f, k_naive_CD4_IL_7_m, k_CD4_m
+新定义参数	k_pDC_f_div_m	k_pDC_f, k_pDC_m

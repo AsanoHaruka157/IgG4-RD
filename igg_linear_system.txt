@@ -1,0 +1,33 @@
+IgG状态的线性方程组
+================================================================================
+
+Eq1: nDC:  = 0
+Eq2: mDC: + 20.0 * k_mDC_f - 400.0 * k_mDC_f_div_m - 20.0 * k_mDC_d = 0
+Eq3: pDC: + 4.0 * k_pDC_f - 16.0 * k_pDC_f_div_m - 4.0 * k_pDC_d = 0
+Eq4: GMCSF: + 0.3 * k_GMCSF_Th2_f + 0.3 * k_GMCSF_Th2_Antigen_f + 310.0 * k_GMCSF_act_NK_f - 5200.0 * k_GMCSF_d = 0
+Eq5: IL_33: + 4.0 * k_IL_33_pDC_f - 500.0 * k_act_CD4_IL_33_d_eff - 40000.0 * k_IL_33_d = 0
+Eq6: IL_6: + 4.0 * k_IL_6_pDC_f + 20.0 * k_IL_6_mDC_f + 20.0 * k_IL_6_TFH_eff - 500.0 * k_TFH_IL_6_d_eff - 60000.0 * k_IL_6_d = 0
+Eq7: IL_12: + 20.0 * k_IL_12_mDC_f - 25.0 * k_act_NK_IL_12_d_eff - 20000.0 * k_IL_12_d = 0
+Eq8: IL_15: + 1.0 * k_IL_15_f + 1.0 * k_IL_15_Antigen_f - 80.0 * k_naive_CD4_IL_15_d_eff - 500.0 * k_act_CD4_IL_15_d_eff - 140000.0 * k_IL_15_d = 0
+Eq9: IL_7: + 1.0 * k_IL_7_f - 80.0 * k_naive_CD4_IL_7_d_eff - 500.0 * k_act_CD4_IL_7_d_eff - 100000.0 * k_IL_7_d = 0
+Eq10: IFN1: + 4.0 * k_IFN1_pDC_f - 500.0 * k_act_CD4_IFN1_d_eff - 25.0 * k_act_NK_IFN1_d_eff - 1.0 * k_IFN1_d = 0
+Eq11: IL_1: + 20.0 * k_IL_1_mDC_f - 7000.0 * k_IL_1_d = 0
+Eq12: IL_2: + 500.0 * k_IL_2_act_CD4_f + 500.0 * k_IL_2_act_CD4_Antigen_f - 80.0 * k_act_CD4_IL_2_d_eff - 25.0 * k_act_NK_IL_2_d_eff - 13000.0 * k_IL_2_d = 0
+Eq13: IL_4: + 0.3 * k_IL_4_Th2_f + 0.3 * k_IL_4_Th2_Antigen_f - 500.0 * k_act_CD4_IL_4_d_eff - 1800.0 * k_IL_4_d = 0
+Eq14: IL_10: + 40.0 * k_IL_10_iTreg_f + 10.0 * k_IL_10_nTreg_eff - 500.0 * k_iTreg_mDC_d_eff - 9000.0 * k_IL_10_d = 0
+Eq15: TGFbeta: + 40.0 * k_TGFbeta_iTreg_f + 3.0 * k_TGFbeta_CD4_CTL_f + 10.0 * k_TGFbeta_nTreg_eff - 500.0 * k_iTreg_mDC_d_TGFbeta_eff - 50.0 * k_TGFbeta_d = 0
+Eq16: IFN_g: + 3.0 * k_IFN_g_CD4_CTL_f + 310.0 * k_IFN_g_act_NK_f - 25.0 * k_act_NK_IFN_g_d_eff - 1.0e6 * k_IFN_g_d = 0
+Eq17: naive_CD4: + 80.0 * k_CD4_f - 6400.0 * k_CD4_f_div_m + 80.0 * k_naive_CD4_IL_15_eff - 6400.0 * k_naive_CD4_IL_15_eff_div_m + 80.0 * k_naive_CD4_IL_7_eff - 6400.0 * k_naive_CD4_IL_7_eff_div_m - 80.0 * k_act_CD4_mDC_f_eff - 80.0 * k_act_CD4_IL_2_f_eff - 80.0 * k_naive_CD4_d = 0
+Eq18: act_CD4: + 80.0 * k_act_CD4_mDC_f_eff + 80.0 * k_act_CD4_IL_2_f_eff + 500.0 * k_act_CD4_f - 250000.0 * k_act_CD4_f_div_m + 500.0 * k_act_CD4_IL_15_eff - 250000.0 * k_act_CD4_IL_15_eff_div_m + 500.0 * k_act_CD4_IL_7_eff - 250000.0 * k_act_CD4_IL_7_eff_div_m - 500.0 * k_Th2_f_eff - 500.0 * k_Th2_IL_4_eff - 500.0 * k_Th2_IL_33_eff - 500.0 * k_iTreg_TGFbeta_eff - 500.0 * k_iTreg_IL_10_eff - 500.0 * k_act_CD4_CTL_basal_f - 500.0 * k_act_CD4_CTL_antigen_f - 500.0 * k_act_CD4_IFN1_f_eff - 500.0 * k_TFH_mDC_f - 500.0 * k_TFH_mDC_Antigen_f - 500.0 * k_TFH_IFN1_f_eff - 500.0 * k_TFH_IL_6_f_eff - 500.0 * k_act_CD4_d = 0
+Eq19: Th2: + 500.0 * k_Th2_f_eff + 500.0 * k_Th2_IL_4_eff + 500.0 * k_Th2_IL_33_eff + 0.3 * k_Th2_f - 0.09 * k_Th2_f_div_m - 0.3 * k_Th2_d = 0
+Eq20: iTreg: + 500.0 * k_iTreg_TGFbeta_eff + 500.0 * k_iTreg_IL_10_eff + 40.0 * k_iTreg_f - 1600.0 * k_iTreg_f_div_m - 40.0 * k_iTreg_d = 0
+Eq21: CD4_CTL: + 500.0 * k_act_CD4_CTL_basal_f + 500.0 * k_act_CD4_CTL_antigen_f + 500.0 * k_act_CD4_IFN1_f_eff + 3.0 * k_CD4_CTL_f - 9.0 * k_CD4_CTL_f_div_m - 3.0 * k_CD4_CTL_d = 0
+Eq22: nTreg: + 10.0 * k_nTreg_mDC_f_eff - 100.0 * k_nTreg_mDC_f_eff_div_m - 10.0 * k_nTreg_d = 0
+Eq23: TFH: + 500.0 * k_TFH_mDC_f + 500.0 * k_TFH_mDC_Antigen_f + 500.0 * k_TFH_IFN1_f_eff + 500.0 * k_TFH_IL_6_f_eff + 20.0 * k_TFH_f - 400.0 * k_TFH_f_div_m - 20.0 * k_TFH_d = 0
+Eq24: NK: + 25.0 * k_NK_f - 625.0 * k_NK_f_div_m - 25.0 * k_act_NK_base_f - 25.0 * k_act_NK_IL_12_f_eff - 25.0 * k_act_NK_IL_2_f_eff - 25.0 * k_act_NK_IFN1_f_eff - 25.0 * k_act_NK_IFN_g_f_eff - 25.0 * k_NK_d = 0
+Eq25: act_NK: + 25.0 * k_act_NK_base_f + 25.0 * k_act_NK_IL_12_f_eff + 25.0 * k_act_NK_IL_2_f_eff + 25.0 * k_act_NK_IFN1_f_eff + 25.0 * k_act_NK_IFN_g_f_eff + 310.0 * k_act_NK_f - 96100.0 * k_act_NK_f_div_m - 310.0 * k_act_NK_d = 0
+Eq26: Naive_B: + 94.0 * k_Naive_B_f - 8836.0 * k_Naive_B_f_div_m + 94.0 * k_Naive_B_Antigen_f - 8836.0 * k_Naive_B_Antigen_f_div_m - 94.0 * k_Act_B_basal_f - 94.0 * k_Act_B_Antigen_f - 94.0 * k_Naive_B_d = 0
+Eq27: Act_B: + 94.0 * k_Act_B_basal_f + 94.0 * k_Act_B_Antigen_f + 85.0 * k_Act_B_f - 7225.0 * k_Act_B_f_div_m + 85.0 * k_Act_B_Antigen_pro_f - 7225.0 * k_Act_B_Antigen_pro_f_div_m - 85.0 * k_Act_B_d = 0
+Eq28: TD_IS_B: + 85.0 * k_TD_base_f + 153000.0 * k_TD_IL_4_f + 10.0 * k_TD_f - 100.0 * k_TD_f_div_m - 10.0 * k_TD_d = 0
+Eq29: TI_IS_B: + 85.0 * k_TI_base_f + 8.5e7 * k_TI_IFN_g_f + 765000.0 * k_TI_IL_10_f + 0.1 * k_TI_f - 0.010000000000000002 * k_TI_f_div_m - 0.1 * k_TI_d = 0
+Eq30: IgG4: + 0.1 * k_IgG4_TI_f + 10.0 * k_IgG4_TD_f - 140.0 * k_IgG4_d = 0
